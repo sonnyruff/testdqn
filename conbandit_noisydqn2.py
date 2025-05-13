@@ -237,10 +237,11 @@ class DQNAgent:
         scores = []
         arm_weights = []
 
+        state, _ = self.env.reset(seed=self.seed)
+
         # Double loop isn't necessary
         for _ in tqdm(range(1, num_episodes + 1)):
             score = 0
-            state, _ = self.env.reset()
             
             action = self.select_action(state)
             next_state, reward = self.step(state, action)
