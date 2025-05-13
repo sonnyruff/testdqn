@@ -14,9 +14,7 @@ class NoisyLinear(nn.Module):
         weight_sigma (nn.Parameter): std value weight parameter
         bias_mu (nn.Parameter): mean value bias parameter
         bias_sigma (nn.Parameter): std value bias parameter
-        
     """
-
     def __init__(self, in_features: int, out_features: int, std_init: float = 0.5):
         """Initialization."""
         super(NoisyLinear, self).__init__()
@@ -26,8 +24,12 @@ class NoisyLinear(nn.Module):
         self.std_init = std_init
 
         self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features))
-        self.weight_sigma = nn.Parameter(torch.Tensor(out_features, in_features))
-        self.register_buffer("weight_epsilon", torch.Tensor(out_features, in_features))
+        self.weight_sigma = nn.Parameter(
+            torch.Tensor(out_features, in_features)
+        )
+        self.register_buffer(
+            "weight_epsilon", torch.Tensor(out_features, in_features)
+        )
 
         self.bias_mu = nn.Parameter(torch.Tensor(out_features))
         self.bias_sigma = nn.Parameter(torch.Tensor(out_features))
@@ -69,15 +71,22 @@ class NoisyLinear(nn.Module):
             self.bias_mu + self.bias_sigma * self.bias_epsilon,
         )
     
+    def get_noise(self):
+        return {
+            "weight_epsilon": self.weight_epsilon.clone().detach().cpu().numpy(),
+            "bias_epsilon": self.bias_epsilon.clone().detach().cpu().numpy(),
+        }
+    
     @staticmethod
     def scale_noise(size: int) -> torch.Tensor:
         """Set scale to make noise (factorized gaussian noise)."""
         x = torch.randn(size)
 
         return x.sign().mul(x.abs().sqrt())
+
+
     
 
 if __name__ == '__main__':
     noisy = NoisyLinear(2, 3)
     print(noisy(torch.rand(1, 2)))
-    pass

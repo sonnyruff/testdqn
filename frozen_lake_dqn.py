@@ -89,10 +89,14 @@ class FrozenLakeDQL():
         # 2. Copy policy network to target network
         target_dqn.load_state_dict(policy_dqn.state_dict())
 
+        self.optimizer = torch.optim.Adam(policy_dqn.parameters(), lr=self.learning_rate_a)
+
+
+        memory = ReplayMemory(self.replay_memory_size)
+
+        # ===================================================================================================
         print('Policy (random, before training):')
         self.print_dqn(policy_dqn)
-
-        self.optimizer = torch.optim.Adam(policy_dqn.parameters(), lr=self.learning_rate_a)
 
         rewards_per_episode = np.zeros(episodes)
 
@@ -100,6 +104,7 @@ class FrozenLakeDQL():
 
         step_count=0
         
+        # ===================================================================================================
         progress_bar = tqdm(range(episodes))
         # 9. repeat from 3
         for i in progress_bar:
@@ -166,7 +171,8 @@ class FrozenLakeDQL():
         # Save plots
         plt.savefig('rsc/' + name + '.png')
 
-    # Optimize policy network
+
+    # Optimize policy network -----------------------------------------------------------
     def optimize(self, mini_batch, policy_dqn, target_dqn):
 
         # Get number of input nodes
@@ -199,7 +205,6 @@ class FrozenLakeDQL():
             target_q = target_dqn(self.state_to_dqn_input(state, num_states)) 
 
             # 7. Adjust the specific action to the target that was just calculated
-            # Adjust the specific action to the target that was just calculated
             target_q[action] = target
             target_q_list.append(target_q)
         
@@ -212,19 +217,18 @@ class FrozenLakeDQL():
         loss.backward()
         self.optimizer.step()
 
-    '''
-    Converts an state (int) to a tensor representation.
-    For example, the FrozenLake 4x4 map has 4x4=16 states numbered from 0 to 15. 
 
-    Parameters: state=1, num_states=16
-    Return: tensor([0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
-    '''
     def state_to_dqn_input(self, state:int, num_states:int)->torch.Tensor:
+        """
+        Converts an state (int) to a tensor representation.
+        Parameters: state=1, num_states=16
+        Return: tensor([0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
+        """
         input_tensor = torch.zeros(num_states)
         input_tensor[state] = 1
         return input_tensor
 
-    # Run the FrozeLake environment with the learned policy
+    # Run the FrozeLake environment with the learned policy -----------------------------
     def test(self, episodes, is_slippery=False):
         # Create FrozenLake instance
         env = gym.make('FrozenLake-v1', map_name="8x8", is_slippery=is_slippery, render_mode='human')
@@ -255,7 +259,7 @@ class FrozenLakeDQL():
 
         env.close()
 
-    # Print DQN: state, best action, q values
+    # Print DQN: state, best action, q values -------------------------------------------
     def print_dqn(self, dqn):
         # Get number of input nodes
         num_states = dqn.fc1.in_features

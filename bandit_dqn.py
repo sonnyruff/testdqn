@@ -1,22 +1,3 @@
-# https://www.youtube.com/watch?v=ZhoIgo3qqLU
-# https://www.youtube.com/watch?v=EUrWGTCGzlA
-# https://www.youtube.com/watch?v=qKePPepISiA
-
-# 1. create policy network
-# 2. copy policy network to target network
-# 3. navigate maze
-#   3a. memorize (state, action, new_state, reward, terminated)
-#   3b. replay take P memories and put them in step 4
-# 4. set input node of policy network corresponding to the location of the player to 1
-# 5. set input node of target network corresponding to the location of the player to 1
-# 6. calculate q value of e.g. q[14,2]
-#       q[s,a] = r if s' is terminal    else    r + discount_factor * max(q[s',:])
-# 7. set output of target network corresponding to the correct action to 1
-# 8. use target values to train policy network
-# 9. repeat from 3
-# 10. after N episodes, sync policy network with target network by copying the weights and biases from the policy network to the target network
-# 11. repeat 9 and 10 until training is done
-
 import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
@@ -28,7 +9,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from NoisyLinear import NoisyLinear
 
-name = 'frozen_lake_noisy_dqn'
+name = 'bandit_dqn'
 
 
 # Define model
@@ -37,8 +18,8 @@ class DQN(nn.Module):
         super().__init__()
 
         # Define network layers
-        self.fc1 = NoisyLinear(in_states, h1_nodes)   # first fully connected layer
-        self.out = NoisyLinear(h1_nodes, out_actions) # ouptut layer w
+        self.fc1 = nn.Linear(in_states, h1_nodes)   # first fully connected layer
+        self.out = nn.Linear(h1_nodes, out_actions) # ouptut layer w
 
     def forward(self, x):
         x = F.relu(self.fc1(x)) # Apply rectified linear unit (ReLU) activation
