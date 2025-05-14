@@ -9,7 +9,7 @@ ObsType = TypeVar("ObsType")
 ActType = TypeVar("ActType")
 
 
-class CustomBanditEnv(gym.Env):
+class BanditEnv0(gym.Env):
     """
     Standard multi-armed bandit environment with static reward distributions.
     """

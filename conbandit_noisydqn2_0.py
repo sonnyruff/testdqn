@@ -31,7 +31,7 @@ from tqdm import tqdm
 import wandb
 import tyro
 
-from custom_envs.conbandit_v0 import CustomContextualBanditEnv
+import custom_envs
 from NoisyLinear import NoisyLinear
 
 ####################################################################################################
@@ -45,7 +45,7 @@ class Args:
     wandb_project_name: str = "noisynet-dqn"
     """the wandb's project name"""
 
-    env_id: str = "CustomContextualBandit-v0"
+    env_id: str = "ContextualBandit-v0"
     """the id of the environment"""
     num_episodes: int = 1000
     """the number of episodes to run"""
