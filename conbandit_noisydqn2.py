@@ -31,7 +31,7 @@ from tqdm import tqdm
 import wandb
 import tyro
 
-import buffalo_gym
+import custom_conbuffalo_gym
 from NoisyLinear import NoisyLinear
 
 ####################################################################################################
@@ -45,7 +45,7 @@ class Args:
     wandb_project_name: str = "noisynet-dqn"
     """the wandb's project name"""
 
-    env_id: str = "ContextualBandit-v0"
+    env_id: str = "CustomContextualBandit-v0"
     """the id of the environment"""
     num_episodes: int = 1000
     """the number of episodes to run"""
@@ -159,7 +159,8 @@ class DQNAgent:
             gamma (float): discount factor
         """
         # NoisyNet: All attributes related to epsilon are removed
-        obs_dim = env.observation_space.shape[0]
+        # obs_dim = env.observation_space.shape[0]
+        obs_dim = env.unwrapped.states
         action_dim = env.action_space.n
         
         self.env = env

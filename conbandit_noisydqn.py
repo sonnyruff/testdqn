@@ -197,6 +197,7 @@ class DQNAgent:
         # NoisyNet: no epsilon greedy action selection
         selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
         selected_action = selected_action.detach().cpu().numpy()
+        # selected_action = self.env.action_space.sample() # random actions
         
         if not self.is_test:
             self.transition = [state, selected_action]
@@ -239,6 +240,7 @@ class DQNAgent:
         scores = []
         arm_weights = []
 
+        # Double loop isn't necessary
         for _ in tqdm(range(1, num_episodes + 1)):
             score = 0
             state, _ = self.env.reset()
@@ -265,7 +267,7 @@ class DQNAgent:
                         "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
                         "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
                     })
-
+                    
                     update_cnt += 1
                     
                     # if hard update is needed
@@ -367,7 +369,7 @@ class DQNAgent:
             ax = axs[0, idx]
             q_matrix = np.array(q_values_list)
             im = ax.imshow(q_matrix, aspect='auto', cmap='viridis', interpolation='nearest')
-            ax.set_title(f'Context: {ctx}')
+            ax.set_title(f'Context: {int(ctx[0])}')
             ax.set_xlabel('Action Index')
             ax.set_ylabel('Training Step')
             fig.colorbar(im, ax=ax)
