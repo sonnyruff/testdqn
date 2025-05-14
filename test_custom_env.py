@@ -2,8 +2,8 @@ import matplotlib.pyplot as plt
 
 import gymnasium as gym
 
-from custom_envs.base_bandit import CustomBanditEnv
-from custom_envs.base_conbandit import CustomContextualBanditEnv
+from custom_envs.bandit_v0 import CustomBanditEnv
+from custom_envs.conbandit_v0 import CustomContextualBanditEnv
 
 def testCustomBanditEnv():
     env = gym.make("CustomBandit-v0", arms=5, optimal_arms=1)

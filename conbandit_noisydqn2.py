@@ -31,7 +31,7 @@ from tqdm import tqdm
 import wandb
 import tyro
 
-from custom_envs.base_conbandit import CustomContextualBanditEnv
+from custom_envs.conbandit_v0 import CustomContextualBanditEnv
 from NoisyLinear import NoisyLinear
 
 ####################################################################################################
@@ -123,7 +123,7 @@ class ReplayBuffer:
 
     def __len__(self) -> int:
         return self.size
-    
+
 class DQNAgent:
     """DQN Agent interacting with environment.
     

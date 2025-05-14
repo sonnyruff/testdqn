@@ -10,9 +10,21 @@ import matplotlib.pyplot as plt
 import pickle
 from tqdm import tqdm
 from NoisyLinear import NoisyLinear
-from ReplayMemory import ReplayMemory
 
 name = 'conbandit_dqn'
+
+class ReplayMemory():
+    def __init__(self, maxlen):
+        self.memory = deque([], maxlen=maxlen)
+    
+    def append(self, transition):
+        self.memory.append(transition)
+
+    def sample(self, sample_size):
+        return random.sample(self.memory, sample_size)
+
+    def __len__(self):
+        return len(self.memory)
 
 # Define model
 class DQN(nn.Module):
