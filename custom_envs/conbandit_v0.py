@@ -22,11 +22,9 @@ class CustomContextualBanditEnv(gym.Env):
         self.rng = np.random.default_rng(self.seed)
         self.offsets = np.random.uniform(self.min_suboptimal_mean, self.max_suboptimal_mean,
                                          size=(1, self.states, self.arms))
-        self.optimal_arms_list = {}
         self.stds = []
         for state in range(self.states):
             optimal_arms = self.rng.choice(range(self.arms), self.optimal_arms, replace=False)
-            self.optimal_arms_list[state] = optimal_arms
             for arm in optimal_arms:
                 self.offsets[0, state, arm] = self.optimal_mean
             self.stds.append([self.optimal_std if arm in optimal_arms else self.suboptimal_std
