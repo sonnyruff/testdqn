@@ -1,5 +1,5 @@
-import random
 from typing import Any, TypeVar, SupportsFloat
+import random
 import matplotlib.pyplot as plt
 
 import gymnasium as gym
@@ -9,7 +9,7 @@ ObsType = TypeVar("ObsType")
 ActType = TypeVar("ActType")
 
 
-class BuffaloEnv(gym.Env):
+class CustomBanditEnv(gym.Env):
     """
     Standard multi-armed bandit environment with static reward distributions.
     """
@@ -93,38 +93,3 @@ class BuffaloEnv(gym.Env):
 
         return np.zeros((1,), dtype=np.float32), reward, False, False, {"offsets": self.offsets}
 
-
-gym.register(
-    id='CustomBandit-v0',
-    entry_point='buffalo_gym.envs:BuffaloEnv',
-    max_episode_steps=1000
-)
-
-if __name__ == "__main__":
-    env = gym.make("CustomBandit-v0", arms=5, optimal_arms=1)
-    state, _ = env.reset()
-
-    rewards_by_action = {}
-
-    for _ in range(10000):
-        action = env.action_space.sample()  # Random action
-        _, reward, _, _, _ = env.step(action)
-
-        if action not in rewards_by_action:
-            rewards_by_action[action] = []
-
-        rewards_by_action[action].append(reward)
-
-    plt.figure(figsize=(14, 4))
-
-    for action, rewards in rewards_by_action.items():
-        plt.hist(rewards, bins=50, alpha=0.6, label=f"Action {action}")
-
-    plt.title("Reward Distribution by Action")
-    plt.xlabel("Reward")
-    plt.ylabel("Frequency")
-    plt.legend()
-    plt.grid(True)
-
-    plt.tight_layout()
-    plt.show()

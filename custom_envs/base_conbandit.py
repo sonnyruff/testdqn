@@ -9,7 +9,7 @@ ObsType = TypeVar("ObsType")
 ActType = TypeVar("ActType")
 
 
-class MultiBuffaloEnv(gym.Env):
+class CustomContextualBanditEnv(gym.Env):
     """
     Multi-armed bandit environment with multiple states that have (probably) distinct rewards
     """
@@ -22,10 +22,11 @@ class MultiBuffaloEnv(gym.Env):
         self.rng = np.random.default_rng(self.seed)
         self.offsets = np.random.uniform(self.min_suboptimal_mean, self.max_suboptimal_mean,
                                          size=(1, self.states, self.arms))
-
+        self.optimal_arms_list = {}
         self.stds = []
         for state in range(self.states):
             optimal_arms = self.rng.choice(range(self.arms), self.optimal_arms, replace=False)
+            self.optimal_arms_list[state] = optimal_arms
             for arm in optimal_arms:
                 self.offsets[0, state, arm] = self.optimal_mean
             self.stds.append([self.optimal_std if arm in optimal_arms else self.suboptimal_std
@@ -112,46 +113,3 @@ class MultiBuffaloEnv(gym.Env):
 
         return np.ones((1,), dtype=np.float32)*self.state, reward, False, False, {'offsets': self.offsets}
 
-
-gym.register(
-    id='CustomContextualBandit-v0',
-    entry_point='buffalo_gym.envs:MultiBuffaloEnv',
-    max_episode_steps=1000
-)
-
-####################################################################################################
-
-if __name__ == "__main__":
-    env = gym.make("CustomContextualBandit-v0", arms=5, optimal_arms=1, states=3, pace=1)
-    state, _ = env.reset()
-
-    rewards_by_state_action = {}
- 
-    for _ in range(10000):
-        action = env.action_space.sample()  # Random action
-        next_state, reward, _, _, _ = env.step(action)
-        state_index = int(state[0])
-        state = next_state
-
-        if state_index not in rewards_by_state_action:
-            rewards_by_state_action[state_index] = {}
-        if action not in rewards_by_state_action[state_index]:
-            rewards_by_state_action[state_index][action] = []
-        
-        rewards_by_state_action[state_index][action].append(reward)
-
-    num_states = len(rewards_by_state_action)
-    plt.figure(figsize=(14, 3 * num_states))
-
-    for i, (state_index, actions) in enumerate(rewards_by_state_action.items()):
-        plt.subplot(num_states, 1, i + 1)
-        for action, rewards in actions.items():
-            plt.hist(rewards, bins=50, alpha=0.6, label=f"Action {action}")
-        plt.title(f"Reward Distribution in State {state_index}")
-        plt.xlabel("Reward")
-        plt.ylabel("Frequency")
-        plt.legend()
-        plt.grid(True)
-
-    plt.tight_layout()
-    plt.show()
