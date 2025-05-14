@@ -31,7 +31,7 @@ from tqdm import tqdm
 import wandb
 import tyro
 
-import custom_conbuffalo_gym
+from custom_envs.base_conbandit import CustomContextualBanditEnv
 from NoisyLinear import NoisyLinear
 
 ####################################################################################################
@@ -159,8 +159,8 @@ class DQNAgent:
             gamma (float): discount factor
         """
         # NoisyNet: All attributes related to epsilon are removed
-        # obs_dim = env.observation_space.shape[0]
-        obs_dim = env.unwrapped.states
+        obs_dim = env.observation_space.shape[0]
+        # obs_dim = env.unwrapped.states # WRONG
         action_dim = env.action_space.n
         
         self.env = env
