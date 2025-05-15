@@ -31,7 +31,7 @@ from tqdm import tqdm
 import wandb
 import tyro
 
-import buffalo_gym
+import custom_envs
 from NoisyLinear import NoisyLinear
 
 ####################################################################################################
@@ -47,9 +47,9 @@ class Args:
 
     env_id: str = "ContextualBandit-v0"
     """the id of the environment"""
-    num_episodes: int = 5
+    num_episodes: int = 1000
     """the number of episodes to run"""
-    episode_length: int = 200
+    episode_length: int = 1
     """the length of each episode"""
     memory_size: int = 1000
     """the replay memory buffer size"""
@@ -195,9 +195,9 @@ class DQNAgent:
     def select_action(self, state: np.ndarray) -> np.ndarray:
         """Select an action from the input state."""
         # NoisyNet: no epsilon greedy action selection
-        selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
-        selected_action = selected_action.detach().cpu().numpy()
-        # selected_action = self.env.action_space.sample() # random actions
+        # selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
+        # selected_action = selected_action.detach().cpu().numpy()
+        selected_action = self.env.action_space.sample() # random actions
         
         if not self.is_test:
             self.transition = [state, selected_action]
@@ -239,6 +239,7 @@ class DQNAgent:
         losses = []
         scores = []
         arm_weights = []
+        chosen_actions = []
 
         # Double loop isn't necessary
         for _ in tqdm(range(1, num_episodes + 1)):
@@ -248,9 +249,13 @@ class DQNAgent:
             for _ in range(episode_length):
                 action = self.select_action(state)
                 next_state, reward = self.step(state, action)
+
+                chosen_actions[state].append(np.)
+
                 state = next_state
                 score += reward
 
+                # ??? What does this mean in the context of neural networks
                 q_values = self.dqn(torch.FloatTensor(state).to(self.device)).detach().cpu().numpy()
                 arm_weights.append((state.astype(int), q_values))
 
@@ -343,13 +348,13 @@ class DQNAgent:
         plt.subplot(121)
         plt.title('score: %s' % (np.mean(scores[-10:])))
         plt.plot(scores)
-        plt.xlabel('Episode')
+        plt.xlabel('Step')
         plt.ylabel('Score')
 
         plt.subplot(122)
         plt.title('loss')
         plt.plot(losses)
-        plt.xlabel('Training Steps')
+        plt.xlabel('Step')
         plt.ylabel('Loss')
 
         context_dict = {}
@@ -363,20 +368,20 @@ class DQNAgent:
 
         n_contexts = len(context_dict)
         fig, axs = plt.subplots(1, n_contexts, figsize=(3 * n_contexts, 5), squeeze=False)
-        fig.suptitle("Q-value Heatmaps by Context", fontsize=16)
+        fig.suptitle("Action selection per Context", fontsize=16)
 
         for idx, (ctx, q_values_list) in enumerate(context_dict.items()):
             ax = axs[0, idx]
             q_matrix = np.array(q_values_list)
             im = ax.imshow(q_matrix, aspect='auto', cmap='viridis', interpolation='nearest')
             ax.set_title(f'Context: {int(ctx[0])}')
-            ax.set_xlabel('Action Index')
-            ax.set_ylabel('Training Step')
+            ax.set_xlabel('Action')
+            ax.set_ylabel('Step')
             fig.colorbar(im, ax=ax)
 
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         plt.show()
-        wandb.log({"Q-value Heatmaps": wandb.Image(fig)})
+        wandb.log({"Action selection Heatmaps": wandb.Image(fig)})
 
 ####################################################################################################
 

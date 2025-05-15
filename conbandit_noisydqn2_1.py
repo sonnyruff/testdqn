@@ -45,9 +45,9 @@ class Args:
     wandb_project_name: str = "noisynet-dqn"
     """the wandb's project name"""
 
-    env_id: str = "ContextualBandit-v0"
+    env_id: str = "ContextualBandit-v1"
     """the id of the environment"""
-    num_episodes: int = 1000
+    num_episodes: int = 10000
     """the number of episodes to run"""
     memory_size: int = 1000
     """the replay memory buffer size"""
@@ -76,9 +76,9 @@ class Network(nn.Module):
         """Initialization."""
         super(Network, self).__init__()
 
-        self.feature = nn.Linear(in_dim, 128)
-        self.noisy_layer1 = NoisyLinear(128, 128)
-        self.noisy_layer2 = NoisyLinear(128, out_dim)
+        self.feature = nn.Linear(in_dim, out_dim)
+        self.noisy_layer1 = NoisyLinear(out_dim, out_dim)
+        self.noisy_layer2 = NoisyLinear(out_dim, out_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward method implementation."""
@@ -181,6 +181,8 @@ class DQNAgent:
         self.dqn_target = Network(obs_dim, action_dim).to(self.device)
         self.dqn_target.load_state_dict(self.dqn.state_dict())
         self.dqn_target.eval()
+
+        print(self.dqn)
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
@@ -194,9 +196,8 @@ class DQNAgent:
     def select_action(self, state: np.ndarray) -> np.ndarray:
         """Select an action from the input state."""
         # NoisyNet: no epsilon greedy action selection
-        # selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
-        # selected_action = selected_action.detach().cpu().numpy()
-        selected_action = self.env.action_space.sample() # random actions
+        selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
+        selected_action = selected_action.detach().cpu().numpy()
         
         if not self.is_test:
             self.transition = [state, selected_action]
@@ -238,6 +239,7 @@ class DQNAgent:
         losses = []
         scores = []
         arm_weights = []
+        data = []
 
         state, _ = self.env.reset(seed=self.seed)
 
@@ -247,6 +249,9 @@ class DQNAgent:
             
             action = self.select_action(state)
             next_state, reward = self.step(state, action)
+
+            data.append([float(state[0]), action, float(reward)])
+
             state = next_state
             score += reward
 
@@ -277,7 +282,7 @@ class DQNAgent:
             wandb.log({"score": score})
                 
         self.env.close()
-        self._plot(scores, losses, arm_weights)
+        self._plot(scores, losses, arm_weights, np.array(data))
         
     def test(self, episode_length) -> None:
         """Test the agent."""
@@ -336,19 +341,20 @@ class DQNAgent:
         scores: List[float], 
         losses: List[float],
         arm_weights: List[np.ndarray],
+        data: np.ndarray
     ):
         """Plot the training progresses."""
         plt.figure(figsize=(15, 5))
         plt.subplot(121)
         plt.title('score: %s' % (np.mean(scores[-10:])))
         plt.plot(scores)
-        plt.xlabel('Step')
+        plt.xlabel('Episode')
         plt.ylabel('Score')
 
         plt.subplot(122)
         plt.title('loss')
         plt.plot(losses)
-        plt.xlabel('Step')
+        plt.xlabel('Training Steps')
         plt.ylabel('Loss')
 
         context_dict = {}
@@ -358,24 +364,31 @@ class DQNAgent:
                 context_dict[ctx_key] = []
             context_dict[ctx_key].append(q_values)
 
-        # print(f"Contexts seen: {len(context_dict)}")
-
         n_contexts = len(context_dict)
         fig, axs = plt.subplots(1, n_contexts, figsize=(3 * n_contexts, 5), squeeze=False)
-        fig.suptitle("Action selection per Context", fontsize=16)
+        fig.suptitle("Arm selection heatmaps by Context", fontsize=16)
 
         for idx, (ctx, q_values_list) in enumerate(context_dict.items()):
             ax = axs[0, idx]
             q_matrix = np.array(q_values_list)
             im = ax.imshow(q_matrix, aspect='auto', cmap='viridis', interpolation='nearest')
             ax.set_title(f'Context: {int(ctx[0])}')
-            ax.set_xlabel('Action')
-            ax.set_ylabel('Step')
+            ax.set_xlabel('Action Index')
+            ax.set_ylabel('Training Step')
             fig.colorbar(im, ax=ax)
 
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         plt.show()
-        wandb.log({"Action selection Heatmaps": wandb.Image(fig)})
+        wandb.log({"Q-value Heatmaps": wandb.Image(fig)})
+
+        plt.figure(figsize=(12, 6))
+        scatter = plt.scatter(data[:, 0], data[:, 2], c=data[:, 1], cmap="viridis", alpha=0.6)
+        plt.colorbar(scatter, label="Action")
+        plt.xlabel("State")
+        plt.ylabel("Reward")
+        plt.grid(True)
+        plt.show()
+        wandb.log({"Reward Scatter": wandb.Image(scatter)})
 
 ####################################################################################################
 

@@ -23,6 +23,7 @@ class ConbanditEnv1(gym.Env):
         # return self.intercepts[action] + self.slopes[action] * state
         # SIGMOID
         return 1 / (1 + np.exp(-self.intercepts[action] - self.slopes[action] * state))
+        # return 1 / (1 + np.exp((state - self.intercepts[action]*3) * self.slopes[action] * 5))
 
     def __draw_arms(self):
         """
@@ -43,6 +44,7 @@ class ConbanditEnv1(gym.Env):
 
     def __draw_state(self): 
         self.state = self.rng.normal(0, 1, 1)
+        # self.state = self.rng.uniform(-3, 3, 1)
 
     def __init__(self, arms: int = 10, states: int = 2, optimal_arms: int | list[int] = 1,
                  dynamic_rate: int | None = None, pace: int = 5, seed: int | None = None, optimal_mean: float = 10,
@@ -125,6 +127,7 @@ class ConbanditEnv1(gym.Env):
 
         self.pulls += 1
         if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
+            print(f"Changing arms")
             if self.seed is not None:
                 self.seed += 1
             self.__draw_arms()

@@ -6,7 +6,6 @@ import gymnasium as gym
 import custom_envs
 
 
-
 def test_bandit_v0():
     env = gym.make("Bandit-v0", arms=5, optimal_arms=1)
     _, _ = env.reset()
@@ -36,8 +35,8 @@ def test_bandit_v0():
     plt.tight_layout()
     plt.show()
 
-def test_conbandit_v0():
-    env = gym.make("ContextualBandit-v0", arms=5, optimal_arms=1, states=3, pace=1, suboptimal_std=0.2)
+def test_conbandit_v0(seed: int = 0):
+    env = gym.make("ContextualBandit-v0", arms=5, optimal_arms=1, states=3, pace=1, suboptimal_std=0.2, seed=seed)
     state, _ = env.reset()
 
     print(env.unwrapped.offsets)
@@ -77,44 +76,18 @@ def test_conbandit_v0():
     plt.tight_layout()
     plt.show()
 
-def test_conbandit_v1_0():
+def test_conbandit_v1_0(seed: int = 0):
     arms = 5
-    env = gym.make("ContextualBandit-v1", arms=arms, optimal_arms=1, states=3, pace=1, suboptimal_std=0.2)
+    env = gym.make("ContextualBandit-v1", arms=arms, optimal_arms=1, states=3, pace=1, suboptimal_std=0.2, seed=0)
     state, _ = env.reset()
 
     states = []
-    rewards_by_state_action = {}
  
     for _ in range(1000):
         action = env.action_space.sample()  # Random action
         next_state, reward, _, _, _ = env.step(action)
-        # state_index = int(state[0])
         state = next_state
         states.append(state.item())
-
-        # if state_index not in rewards_by_state_action:
-        #     rewards_by_state_action[state_index] = {}
-        # if action not in rewards_by_state_action[state_index]:
-        #     rewards_by_state_action[state_index][action] = []
-        
-        # rewards_by_state_action[state_index][action].append(reward)
-
-    # num_states = len(rewards_by_state_action)
-    # plt.figure(figsize=(14, 3 * num_states))
-
-    # for i, (state_index, actions) in enumerate(rewards_by_state_action.items()):
-    #     # print(f"State {state_index}: {env.optimal_arms_list}")
-    #     plt.subplot(num_states, 1, i + 1)
-    #     for action, rewards in actions.items():
-    #         plt.hist(rewards, bins=50, alpha=0.6, label=f"Action {action}")
-    #     plt.title(f"Reward Distribution in State {state_index}")
-    #     plt.xlabel("Reward")
-    #     plt.ylabel("Frequency")
-    #     plt.legend()
-    #     plt.grid(True)
-
-    # plt.tight_layout()
-    # plt.show()
 
     plt.hist(states, bins=10)
     plt.title("State Frequency Histogram")
@@ -141,9 +114,9 @@ def test_conbandit_v1_0():
     plt.grid(True)
     plt.show()
 
-def test_conbandit_v1_1():
+def test_conbandit_v1_1(seed: int = 0):
     arms = 5
-    env = gym.make("ContextualBandit-v1", arms=arms, optimal_arms=1, states=3, pace=1, suboptimal_std=0.2)
+    env = gym.make("ContextualBandit-v1", arms=arms, optimal_arms=1, states=3, pace=1, suboptimal_std=0.2, seed=seed)
     state, _ = env.reset()
 
     data = []
@@ -170,5 +143,5 @@ def test_conbandit_v1_1():
 if __name__ == "__main__":
     # test_bandit_v0()
     # test_conbandit_v0()
-    # test_conbandit_v1_0()
-    test_conbandit_v1_1()
+    test_conbandit_v1_0()
+    # test_conbandit_v1_1()
