@@ -1,8 +1,8 @@
 """
 conbandit_noisydqn.py
 
-A minimal implementation of a NoisyNet-DQN agent trained on a contextual bandit setting.
-This script uses PyTorch, Gymnasium, and Weights & Biases for logging, environment handling and visualization.
+NoisyNet-DQN implementation for ContextualBandit-v0
+Nested loop version
 
 Author: Sonny Ruff
 Date: 12-05-2025
@@ -11,9 +11,6 @@ Based on:
 - NoisyNet-DQN implementation from https://nbviewer.org/github/Curt-Park/rainbow-is-all-you-need/blob/master/05.noisy_net.ipynb
 - Parts of https://github.com/knyazer/nanodqn/tree/main
 - OpenAI Gym (https://github.com/openai/gym) & Buffalo Gym environment (https://github.com/foreverska/buffalo-gym)
-
-Run with:
-    python conbandit_noisydqn.py --help
 """
 import os
 from datetime import datetime
@@ -239,7 +236,6 @@ class DQNAgent:
         losses = []
         scores = []
         arm_weights = []
-        chosen_actions = []
 
         # Double loop isn't necessary
         for _ in tqdm(range(1, num_episodes + 1)):
@@ -250,12 +246,10 @@ class DQNAgent:
                 action = self.select_action(state)
                 next_state, reward = self.step(state, action)
 
-                chosen_actions[state].append(np.)
-
                 state = next_state
                 score += reward
 
-                # ??? What does this mean in the context of neural networks
+                # Run one forward pass to retrieve predictions
                 q_values = self.dqn(torch.FloatTensor(state).to(self.device)).detach().cpu().numpy()
                 arm_weights.append((state.astype(int), q_values))
 

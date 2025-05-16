@@ -11,7 +11,7 @@ ActType = TypeVar("ActType")
 
 class ConbanditEnv1(gym.Env):
     """
-    Multi-armed bandit environment with multiple states that have (probably) distinct rewards
+    Multi-armed bandit environment with a continuous state
     """
     metadata = {'render_modes': []}
 
