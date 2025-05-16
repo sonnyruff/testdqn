@@ -1,5 +1,4 @@
 import gymnasium as gym
-import buffalo_gym
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -10,6 +9,7 @@ import matplotlib.pyplot as plt
 import pickle
 from tqdm import tqdm
 from NoisyLinear import NoisyLinear
+
 
 name = 'conbandit_dqn'
 
@@ -53,7 +53,7 @@ class ConbanditNoisyDQN():
     optimizer = None                # NN Optimizer. Initialize later.
 
     def train(self, episodes):
-        env = gym.make("MultiBuffalo-v0")
+        env = gym.make("ContextualBandit-v0")
         num_states = 2
         num_actions = env.action_space.n
         
@@ -192,7 +192,7 @@ class ConbanditNoisyDQN():
 
     # Run the FrozeLake environment with the learned policy -----------------------------
     def test(self, episodes):
-        env = gym.make("MultiBuffalo-v0")
+        env = gym.make("ContextualBandit-v0")
         num_states = 2
         num_actions = env.action_space.n
 
