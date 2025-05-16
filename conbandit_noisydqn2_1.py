@@ -44,10 +44,12 @@ class Args:
     """seed of the experiment"""
     wandb_project_name: str = "noisynet-dqn"
     """the wandb's project name"""
+    logging: bool = True
+    """whether to log to wandb"""
 
     env_id: str = "ContextualBandit-v1"
     """the id of the environment"""
-    num_episodes: int = 10000
+    num_episodes: int = 1000
     """the number of episodes to run"""
     memory_size: int = 1000
     """the replay memory buffer size"""
@@ -244,13 +246,13 @@ class DQNAgent:
         state, _ = self.env.reset(seed=self.seed)
 
         # Double loop isn't necessary
-        for _ in tqdm(range(1, num_episodes + 1)):
+        for step_id in tqdm(range(1, num_episodes + 1)):
             score = 0
             
             action = self.select_action(state)
             next_state, reward = self.step(state, action)
 
-            data.append([float(state[0]), action, float(reward)])
+            data.append([step_id, float(state[0]), action, float(reward)])
 
             state = next_state
             score += reward
@@ -262,10 +264,10 @@ class DQNAgent:
             if len(self.memory) >= self.batch_size:
                 loss = self.update_model()
                 losses.append(loss)
-                wandb.log({"loss": loss})
+                if args.logging: wandb.log({"loss": loss})
                 noise_l1 = self.dqn.noisy_layer1.get_noise()
                 noise_l2 = self.dqn.noisy_layer2.get_noise()
-                wandb.log({
+                if args.logging: wandb.log({
                     "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
                     "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
                     "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
@@ -279,7 +281,7 @@ class DQNAgent:
                     self._target_hard_update()
             
             scores.append(score)
-            wandb.log({"score": score})
+            if args.logging: wandb.log({"score": score})
                 
         self.env.close()
         self._plot(scores, losses, arm_weights, np.array(data))
@@ -357,45 +359,85 @@ class DQNAgent:
         plt.xlabel('Training Steps')
         plt.ylabel('Loss')
 
-        context_dict = {}
-        for state, q_values in arm_weights:
-            ctx_key = tuple(state)
-            if ctx_key not in context_dict:
-                context_dict[ctx_key] = []
-            context_dict[ctx_key].append(q_values)
+        # context_dict = {}
+        # for state, q_values in arm_weights:
+        #     ctx_key = tuple(state)
+        #     if ctx_key not in context_dict:
+        #         context_dict[ctx_key] = []
+        #     context_dict[ctx_key].append(q_values)
 
-        n_contexts = len(context_dict)
-        fig, axs = plt.subplots(1, n_contexts, figsize=(3 * n_contexts, 5), squeeze=False)
-        fig.suptitle("Arm selection heatmaps by Context", fontsize=16)
+        # n_contexts = len(context_dict)
+        # fig, axs = plt.subplots(1, n_contexts, figsize=(3 * n_contexts, 5), squeeze=False)
+        # fig.suptitle("Arm selection heatmaps by Context", fontsize=16)
 
-        for idx, (ctx, q_values_list) in enumerate(context_dict.items()):
-            ax = axs[0, idx]
-            q_matrix = np.array(q_values_list)
-            im = ax.imshow(q_matrix, aspect='auto', cmap='viridis', interpolation='nearest')
-            ax.set_title(f'Context: {int(ctx[0])}')
-            ax.set_xlabel('Action Index')
-            ax.set_ylabel('Training Step')
-            fig.colorbar(im, ax=ax)
+        # for idx, (ctx, q_values_list) in enumerate(context_dict.items()):
+        #     ax = axs[0, idx]
+        #     q_matrix = np.array(q_values_list)
+        #     im = ax.imshow(q_matrix, aspect='auto', cmap='viridis', interpolation='nearest')
+        #     ax.set_title(f'Context: {int(ctx[0])}')
+        #     ax.set_xlabel('Action Index')
+        #     ax.set_ylabel('Training Step')
+        #     fig.colorbar(im, ax=ax)
 
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-        plt.show()
-        wandb.log({"Q-value Heatmaps": wandb.Image(fig)})
+        # plt.tight_layout(rect=[0, 0, 1, 0.95])
+        # if args.logging: wandb.log({"Q-value Heatmaps": wandb.Image(fig)})
 
-        plt.figure(figsize=(12, 6))
-        scatter = plt.scatter(data[:, 0], data[:, 2], c=data[:, 1], cmap="viridis", alpha=0.6)
-        plt.colorbar(scatter, label="Action")
+        plt.figure(figsize=(15, 10))
+        plt.subplot(211)
+        scatter1 = plt.scatter(data[:, 1], data[:, 0], c=data[:, 2], cmap="viridis", alpha=0.6)
+        plt.colorbar(scatter1, label="Action")
+        plt.xlabel("State")
+        plt.ylabel("Reward")
+        plt.grid(True)
+
+        plt.subplot(212)
+        scatter2 = plt.scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6)
+        plt.colorbar(scatter2, label="Action")
         plt.xlabel("State")
         plt.ylabel("Reward")
         plt.grid(True)
         plt.show()
-        wandb.log({"Reward Scatter": wandb.Image(scatter)})
+        if args.logging: wandb.log({"Reward Scatter": wandb.Image(scatter)})
+
+
+
+
+        num_state_bins = 50
+        num_step_bins = 50
+
+        # Create 2D bins
+        state_vals = data[:, 1]
+        step_vals = data[:, 0]
+        action_vals = data[:, 2]
+
+        heatmap, xedges, yedges = np.histogram2d(
+            state_vals, step_vals, bins=[num_state_bins, num_step_bins], weights=action_vals
+        )
+        counts, _, _ = np.histogram2d(state_vals, step_vals, bins=[xedges, yedges])
+
+        # Avoid divide-by-zero
+        heatmap_avg = np.divide(heatmap, counts, where=counts != 0)
+
+        # Plot the heatmap
+        plt.figure(figsize=(12, 6))
+        extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+        plt.imshow(heatmap_avg.T, extent=extent, origin='lower', aspect='auto', cmap="viridis")
+        plt.colorbar(label="Average Action")
+        plt.xlabel("State")
+        plt.ylabel("Step")
+        plt.title("Heatmap of Average Action (State vs Step)")
+        plt.grid(False)
+        plt.show()
+
+
 
 ####################################################################################################
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
+    print(args.seed)
     run_name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
-    wandb.init(
+    if args.logging:wandb.init(
         project=args.wandb_project_name,
         config=vars(args),
         name=run_name,
@@ -428,4 +470,4 @@ if __name__ == "__main__":
     agent.train(args.num_episodes)
     agent.test(100)
 
-    wandb.finish()
+    if args.logging: wandb.finish()

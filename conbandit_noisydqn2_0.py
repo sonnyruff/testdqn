@@ -358,11 +358,9 @@ class DQNAgent:
                 context_dict[ctx_key] = []
             context_dict[ctx_key].append(q_values)
 
-        # print(f"Contexts seen: {len(context_dict)}")
-
         n_contexts = len(context_dict)
         fig, axs = plt.subplots(1, n_contexts, figsize=(3 * n_contexts, 5), squeeze=False)
-        fig.suptitle("Action selection per Context", fontsize=16)
+        fig.suptitle("Q-values Heatmaps by Context", fontsize=16)
 
         for idx, (ctx, q_values_list) in enumerate(context_dict.items()):
             ax = axs[0, idx]
@@ -371,11 +369,11 @@ class DQNAgent:
             ax.set_title(f'Context: {int(ctx[0])}')
             ax.set_xlabel('Action')
             ax.set_ylabel('Step')
-            fig.colorbar(im, ax=ax)
+            fig.colorbar(im, ax=ax, label='Weight')
 
         plt.tight_layout(rect=[0, 0, 1, 0.95])
         plt.show()
-        wandb.log({"Action selection Heatmaps": wandb.Image(fig)})
+        wandb.log({"Q-value Heatmaps": wandb.Image(fig)})
 
 ####################################################################################################
 
