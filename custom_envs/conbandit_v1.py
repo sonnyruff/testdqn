@@ -126,11 +126,11 @@ class ConbanditEnv1(gym.Env):
             self.__draw_state()
 
         self.pulls += 1
-        if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
-            print(f"Changing arms")
-            if self.seed is not None:
-                self.seed += 1
-            self.__draw_arms()
+        # if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
+        #     print(f"Changing arms")
+        #     if self.seed is not None:
+        #         self.seed += 1
+        #     self.__draw_arms()
 
         return np.array(self.state, dtype=np.float32), reward, False, False, {}
 

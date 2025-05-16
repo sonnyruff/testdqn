@@ -36,13 +36,13 @@ def test_bandit_v0():
     plt.show()
 
 def test_conbandit_v0(seed: int = 0):
+    np.random.seed(seed)
     env = gym.make("ContextualBandit-v0", arms=5, optimal_arms=1, states=3, pace=1, suboptimal_std=0.2, seed=seed)
     state, _ = env.reset()
 
     print(env.unwrapped.offsets)
     print(env.unwrapped.stds)
     print(np.argmax(env.unwrapped.offsets, axis=2)[0]) # !!!
-    
 
     rewards_by_state_action = {}
  
@@ -78,7 +78,8 @@ def test_conbandit_v0(seed: int = 0):
 
 def test_conbandit_v1_0(seed: int = 0):
     arms = 5
-    env = gym.make("ContextualBandit-v1", arms=arms, optimal_arms=1, states=3, pace=1, suboptimal_std=0.2, seed=0)
+    np.random.seed(seed)
+    env = gym.make("ContextualBandit-v1", arms=arms, optimal_arms=1, states=3, pace=1, suboptimal_std=0.2, seed=seed)
     state, _ = env.reset()
 
     states = []
@@ -117,7 +118,7 @@ def test_conbandit_v1_0(seed: int = 0):
 def test_conbandit_v1_1(seed: int = 0):
     arms = 5
     env = gym.make("ContextualBandit-v1", arms=arms, optimal_arms=1, states=3, pace=1, suboptimal_std=0.2, seed=seed)
-    state, _ = env.reset()
+    state, _ = env.reset(seed=seed)
 
     data = []
  
@@ -143,5 +144,5 @@ def test_conbandit_v1_1(seed: int = 0):
 if __name__ == "__main__":
     # test_bandit_v0()
     # test_conbandit_v0()
-    test_conbandit_v1_0()
+    test_conbandit_v1_0(7080)
     # test_conbandit_v1_1()

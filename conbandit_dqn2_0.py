@@ -1,8 +1,8 @@
 """
-conbandit_noisydqn.py
+conbandit_dqn2_0.py
 
-NoisyNet-DQN implementation for ContextualBandit-v0
-Nested loop version
+DQN implementation for ContextualBandit-v1 - Continuous input state
+Single loop version
 
 Author: Sonny Ruff
 Date: 12-05-2025
@@ -41,13 +41,13 @@ class Args:
     """seed of the experiment"""
     wandb_project_name: str = "noisynet-dqn"
     """the wandb's project name"""
+    logging: bool = True
+    """whether to log to wandb"""
 
-    env_id: str = "ContextualBandit-v0"
+    env_id: str = "ContextualBandit-v1"
     """the id of the environment"""
-    num_episodes: int = 1000
+    num_episodes: int = 5000
     """the number of episodes to run"""
-    episode_length: int = 1
-    """the length of each episode"""
     memory_size: int = 1000
     """the replay memory buffer size"""
     gamma: float = 0.99
@@ -75,9 +75,9 @@ class Network(nn.Module):
         """Initialization."""
         super(Network, self).__init__()
 
-        self.feature = nn.Linear(in_dim, 128)
-        self.noisy_layer1 = NoisyLinear(128, 128)
-        self.noisy_layer2 = NoisyLinear(128, out_dim)
+        self.feature = nn.Linear(in_dim, out_dim)
+        self.noisy_layer1 = NoisyLinear(out_dim, out_dim)
+        self.noisy_layer2 = NoisyLinear(out_dim, out_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward method implementation."""
@@ -122,7 +122,7 @@ class ReplayBuffer:
 
     def __len__(self) -> int:
         return self.size
-    
+
 class DQNAgent:
     """DQN Agent interacting with environment.
     
@@ -159,6 +159,7 @@ class DQNAgent:
         """
         # NoisyNet: All attributes related to epsilon are removed
         obs_dim = env.observation_space.shape[0]
+        # obs_dim = env.unwrapped.states # WRONG
         action_dim = env.action_space.n
         
         self.env = env
@@ -179,6 +180,8 @@ class DQNAgent:
         self.dqn_target = Network(obs_dim, action_dim).to(self.device)
         self.dqn_target.load_state_dict(self.dqn.state_dict())
         self.dqn_target.eval()
+
+        print(self.dqn)
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
@@ -192,9 +195,8 @@ class DQNAgent:
     def select_action(self, state: np.ndarray) -> np.ndarray:
         """Select an action from the input state."""
         # NoisyNet: no epsilon greedy action selection
-        # selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
-        # selected_action = selected_action.detach().cpu().numpy()
-        selected_action = self.env.action_space.sample() # random actions
+        selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
+        selected_action = selected_action.detach().cpu().numpy()
         
         if not self.is_test:
             self.transition = [state, selected_action]
@@ -228,7 +230,7 @@ class DQNAgent:
 
         return loss.item()
         
-    def train(self, num_episodes: int, episode_length: int):
+    def train(self, num_episodes: int):
         """Train the agent."""
         self.is_test = False
         
@@ -236,48 +238,50 @@ class DQNAgent:
         losses = []
         scores = []
         arm_weights = []
+        data = []
+
+        state, _ = self.env.reset(seed=self.seed)
 
         # Double loop isn't necessary
-        for _ in tqdm(range(1, num_episodes + 1)):
+        for step_id in tqdm(range(1, num_episodes + 1)):
             score = 0
-            state, _ = self.env.reset()
             
-            for _ in range(episode_length):
-                action = self.select_action(state)
-                next_state, reward = self.step(state, action)
+            action = self.select_action(state)
+            next_state, reward = self.step(state, action)
 
-                state = next_state
-                score += reward
+            data.append([step_id, float(state[0]), action, float(reward)])
 
-                # Run one forward pass to retrieve predictions
-                q_values = self.dqn(torch.FloatTensor(state).to(self.device)).detach().cpu().numpy()
-                arm_weights.append((state.astype(int), q_values))
+            state = next_state
+            score += reward
 
-                # if training is ready
-                if len(self.memory) >= self.batch_size:
-                    loss = self.update_model()
-                    losses.append(loss)
-                    wandb.log({"loss": loss})
-                    noise_l1 = self.dqn.noisy_layer1.get_noise()
-                    noise_l2 = self.dqn.noisy_layer2.get_noise()
-                    wandb.log({
-                        "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
-                        "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
-                        "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
-                        "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
-                    })
-                    
-                    update_cnt += 1
-                    
-                    # if hard update is needed
-                    if update_cnt % self.target_update == 0:
-                        self._target_hard_update()
+            q_values = self.dqn(torch.FloatTensor(state).to(self.device)).detach().cpu().numpy()
+            arm_weights.append((state.astype(int), q_values))
+
+            # if training is ready
+            if len(self.memory) >= self.batch_size:
+                loss = self.update_model()
+                losses.append(loss)
+                if args.logging: wandb.log({"loss": loss})
+                noise_l1 = self.dqn.noisy_layer1.get_noise()
+                noise_l2 = self.dqn.noisy_layer2.get_noise()
+                if args.logging: wandb.log({
+                    "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
+                    "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
+                    "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
+                    "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
+                })
+                
+                update_cnt += 1
+                
+                # if hard update is needed
+                if update_cnt % self.target_update == 0:
+                    self._target_hard_update()
             
             scores.append(score)
-            wandb.log({"score": score})
+            if args.logging: wandb.log({"score": score})
                 
         self.env.close()
-        self._plot(scores, losses, arm_weights)
+        self._plot(scores, losses, arm_weights, np.array(data))
         
     def test(self, episode_length) -> None:
         """Test the agent."""
@@ -336,53 +340,101 @@ class DQNAgent:
         scores: List[float], 
         losses: List[float],
         arm_weights: List[np.ndarray],
+        data: np.ndarray
     ):
         """Plot the training progresses."""
         plt.figure(figsize=(15, 5))
         plt.subplot(121)
         plt.title('score: %s' % (np.mean(scores[-10:])))
         plt.plot(scores)
-        plt.xlabel('Step')
+        plt.xlabel('Episode')
         plt.ylabel('Score')
 
         plt.subplot(122)
         plt.title('loss')
         plt.plot(losses)
-        plt.xlabel('Step')
+        plt.xlabel('Training Steps')
         plt.ylabel('Loss')
 
-        context_dict = {}
-        for state, q_values in arm_weights:
-            ctx_key = tuple(state)
-            if ctx_key not in context_dict:
-                context_dict[ctx_key] = []
-            context_dict[ctx_key].append(q_values)
+        # context_dict = {}
+        # for state, q_values in arm_weights:
+        #     ctx_key = tuple(state)
+        #     if ctx_key not in context_dict:
+        #         context_dict[ctx_key] = []
+        #     context_dict[ctx_key].append(q_values)
 
-        # print(f"Contexts seen: {len(context_dict)}")
+        # n_contexts = len(context_dict)
+        # fig, axs = plt.subplots(1, n_contexts, figsize=(3 * n_contexts, 5), squeeze=False)
+        # fig.suptitle("Arm selection heatmaps by Context", fontsize=16)
 
-        n_contexts = len(context_dict)
-        fig, axs = plt.subplots(1, n_contexts, figsize=(3 * n_contexts, 5), squeeze=False)
-        fig.suptitle("Q-values Heatmaps by Context", fontsize=16)
+        # for idx, (ctx, q_values_list) in enumerate(context_dict.items()):
+        #     ax = axs[0, idx]
+        #     q_matrix = np.array(q_values_list)
+        #     im = ax.imshow(q_matrix, aspect='auto', cmap='viridis', interpolation='nearest')
+        #     ax.set_title(f'Context: {int(ctx[0])}')
+        #     ax.set_xlabel('Action Index')
+        #     ax.set_ylabel('Training Step')
+        #     fig.colorbar(im, ax=ax)
 
-        for idx, (ctx, q_values_list) in enumerate(context_dict.items()):
-            ax = axs[0, idx]
-            q_matrix = np.array(q_values_list)
-            im = ax.imshow(q_matrix, aspect='auto', cmap='viridis', interpolation='nearest')
-            ax.set_title(f'Context: {int(ctx[0])}')
-            ax.set_xlabel('Action')
-            ax.set_ylabel('Step')
-            fig.colorbar(im, ax=ax)
+        # plt.tight_layout(rect=[0, 0, 1, 0.95])
+        # if args.logging: wandb.log({"Q-value Heatmaps": wandb.Image(fig)})
 
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.figure(figsize=(15, 10))
+        plt.subplot(211)
+        scatter1 = plt.scatter(data[:, 1], data[:, 0], c=data[:, 2], cmap="viridis", alpha=0.6)
+        plt.colorbar(scatter1, label="Action")
+        plt.xlabel("State")
+        plt.ylabel("Reward")
+        plt.grid(True)
+
+        plt.subplot(212)
+        scatter2 = plt.scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6)
+        plt.colorbar(scatter2, label="Action")
+        plt.xlabel("State")
+        plt.ylabel("Reward")
+        plt.grid(True)
+        # plt.show()
+        if args.logging: wandb.log({"Reward Scatter": wandb.Image(scatter)})
+
+
+
+
+        num_state_bins = 50
+        num_step_bins = 50
+
+        # Create 2D bins
+        state_vals = data[:, 1]
+        step_vals = data[:, 0]
+        action_vals = data[:, 2]
+
+        heatmap, xedges, yedges = np.histogram2d(
+            state_vals, step_vals, bins=[num_state_bins, num_step_bins], weights=action_vals
+        )
+        counts, _, _ = np.histogram2d(state_vals, step_vals, bins=[xedges, yedges])
+
+        # Avoid divide-by-zero
+        heatmap_avg = np.divide(heatmap, counts, where=counts != 0)
+
+        # Plot the heatmap
+        plt.figure(figsize=(12, 6))
+        extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+        plt.imshow(heatmap_avg.T, extent=extent, origin='lower', aspect='auto', cmap="viridis")
+        plt.colorbar(label="Average Action")
+        plt.xlabel("State")
+        plt.ylabel("Step")
+        plt.title("Heatmap of Average Action (State vs Step)")
+        plt.grid(False)
         plt.show()
-        wandb.log({"Q-value Heatmaps": wandb.Image(fig)})
+
+
 
 ####################################################################################################
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
+    print(args.seed)
     run_name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
-    wandb.init(
+    if args.logging:wandb.init(
         project=args.wandb_project_name,
         config=vars(args),
         name=run_name,
@@ -412,7 +464,7 @@ if __name__ == "__main__":
         suboptimal_std=args.suboptimal_std)
 
     agent = DQNAgent(env, args.memory_size, args.batch_size, args.target_update, args.seed, args.gamma)
-    agent.train(args.num_episodes, args.episode_length)
-    agent.test(args.episode_length)
+    agent.train(args.num_episodes)
+    agent.test(100)
 
-    wandb.finish()
+    if args.logging: wandb.finish()

@@ -1,8 +1,8 @@
 """
-conbandit_noisydqn2_1.py
+conbandit_noisydqn.py
 
-NoisyNet-DQN implementation for ContextualBandit-v1 - Continuous input state
-Single loop version
+NoisyNet-DQN implementation for ContextualBandit-v0 - Incorrect discrete input state
+Nested loop version
 
 Author: Sonny Ruff
 Date: 12-05-2025
@@ -41,13 +41,13 @@ class Args:
     """seed of the experiment"""
     wandb_project_name: str = "noisynet-dqn"
     """the wandb's project name"""
-    logging: bool = True
-    """whether to log to wandb"""
 
-    env_id: str = "ContextualBandit-v1"
+    env_id: str = "ContextualBandit-v0"
     """the id of the environment"""
-    num_episodes: int = 3000
+    num_episodes: int = 1000
     """the number of episodes to run"""
+    episode_length: int = 1
+    """the length of each episode"""
     memory_size: int = 1000
     """the replay memory buffer size"""
     gamma: float = 0.99
@@ -75,9 +75,9 @@ class Network(nn.Module):
         """Initialization."""
         super(Network, self).__init__()
 
-        self.feature = nn.Linear(in_dim, out_dim)
-        self.noisy_layer1 = NoisyLinear(out_dim, out_dim)
-        self.noisy_layer2 = NoisyLinear(out_dim, out_dim)
+        self.feature = nn.Linear(in_dim, 128)
+        self.noisy_layer1 = NoisyLinear(128, 128)
+        self.noisy_layer2 = NoisyLinear(128, out_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward method implementation."""
@@ -122,7 +122,7 @@ class ReplayBuffer:
 
     def __len__(self) -> int:
         return self.size
-
+    
 class DQNAgent:
     """DQN Agent interacting with environment.
     
@@ -159,7 +159,6 @@ class DQNAgent:
         """
         # NoisyNet: All attributes related to epsilon are removed
         obs_dim = env.observation_space.shape[0]
-        # obs_dim = env.unwrapped.states # WRONG
         action_dim = env.action_space.n
         
         self.env = env
@@ -180,8 +179,6 @@ class DQNAgent:
         self.dqn_target = Network(obs_dim, action_dim).to(self.device)
         self.dqn_target.load_state_dict(self.dqn.state_dict())
         self.dqn_target.eval()
-
-        print(self.dqn)
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
@@ -195,8 +192,9 @@ class DQNAgent:
     def select_action(self, state: np.ndarray) -> np.ndarray:
         """Select an action from the input state."""
         # NoisyNet: no epsilon greedy action selection
-        selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
-        selected_action = selected_action.detach().cpu().numpy()
+        # selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
+        # selected_action = selected_action.detach().cpu().numpy()
+        selected_action = self.env.action_space.sample() # random actions
         
         if not self.is_test:
             self.transition = [state, selected_action]
@@ -230,7 +228,7 @@ class DQNAgent:
 
         return loss.item()
         
-    def train(self, num_episodes: int):
+    def train(self, num_episodes: int, episode_length: int):
         """Train the agent."""
         self.is_test = False
         
@@ -238,56 +236,48 @@ class DQNAgent:
         losses = []
         scores = []
         arm_weights = []
-        data = []
-
-        state, _ = self.env.reset(seed=self.seed)
 
         # Double loop isn't necessary
-        for step_id in tqdm(range(1, num_episodes + 1)):
+        for _ in tqdm(range(1, num_episodes + 1)):
             score = 0
+            state, _ = self.env.reset()
             
-            action = self.select_action(state)
-            next_state, reward = self.step(state, action)
+            for _ in range(episode_length):
+                action = self.select_action(state)
+                next_state, reward = self.step(state, action)
 
-            data.append([step_id, float(state[0]), action, float(reward)])
+                state = next_state
+                score += reward
 
-            state = next_state
-            score += reward
+                # Run one forward pass to retrieve predictions
+                q_values = self.dqn(torch.FloatTensor(state).to(self.device)).detach().cpu().numpy()
+                arm_weights.append((state.astype(int), q_values))
 
-
-            if step_id % 10 == 0:
-                x = np.linspace(-3, 3, 100)
-                # put each x value forward through the network
-                q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
-                best_actions = np.argmax(q_values, axis=1)
-                arm_weights.append((step_id, best_actions))
-
-
-            # if training is ready
-            if len(self.memory) >= self.batch_size:
-                loss = self.update_model()
-                losses.append(loss)
-                if args.logging: wandb.log({"loss": loss})
-                noise_l1 = self.dqn.noisy_layer1.get_noise()
-                noise_l2 = self.dqn.noisy_layer2.get_noise()
-                if args.logging: wandb.log({
-                    "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
-                    "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
-                    "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
-                    "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
-                })
-                
-                update_cnt += 1
-                
-                # if hard update is needed
-                if update_cnt % self.target_update == 0:
-                    self._target_hard_update()
+                # if training is ready
+                if len(self.memory) >= self.batch_size:
+                    loss = self.update_model()
+                    losses.append(loss)
+                    wandb.log({"loss": loss})
+                    noise_l1 = self.dqn.noisy_layer1.get_noise()
+                    noise_l2 = self.dqn.noisy_layer2.get_noise()
+                    wandb.log({
+                        "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
+                        "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
+                        "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
+                        "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
+                    })
+                    
+                    update_cnt += 1
+                    
+                    # if hard update is needed
+                    if update_cnt % self.target_update == 0:
+                        self._target_hard_update()
             
             scores.append(score)
-            if args.logging: wandb.log({"score": score})
+            wandb.log({"score": score})
                 
         self.env.close()
-        self._plot(scores, losses, arm_weights, np.array(data))
+        self._plot(scores, losses, arm_weights)
         
     def test(self, episode_length) -> None:
         """Test the agent."""
@@ -346,102 +336,53 @@ class DQNAgent:
         scores: List[float], 
         losses: List[float],
         arm_weights: List[np.ndarray],
-        data: np.ndarray
     ):
         """Plot the training progresses."""
         plt.figure(figsize=(15, 5))
         plt.subplot(121)
         plt.title('score: %s' % (np.mean(scores[-10:])))
         plt.plot(scores)
-        plt.xlabel('Episode')
+        plt.xlabel('Step')
         plt.ylabel('Score')
 
         plt.subplot(122)
         plt.title('loss')
         plt.plot(losses)
-        plt.xlabel('Training Steps')
+        plt.xlabel('Step')
         plt.ylabel('Loss')
 
-        # ------------------------------------------------------
+        context_dict = {}
+        for state, q_values in arm_weights:
+            ctx_key = tuple(state)
+            if ctx_key not in context_dict:
+                context_dict[ctx_key] = []
+            context_dict[ctx_key].append(q_values)
 
-        plt.figure(figsize=(15, 10))
+        # print(f"Contexts seen: {len(context_dict)}")
 
-        # Top subplot: overlay heatmap and scatter1
-        plt.subplot(211)
+        n_contexts = len(context_dict)
+        fig, axs = plt.subplots(1, n_contexts, figsize=(3 * n_contexts, 5), squeeze=False)
+        fig.suptitle("Q-values Heatmaps by Context", fontsize=16)
 
-        # Heatmap
-        step_ids = [step for step, _ in arm_weights]
-        x_vals = np.linspace(-3, 3, 100)
-        action_matrix = np.stack([actions for _, actions in arm_weights], axis=0)  # shape: (num_steps, 100)
+        for idx, (ctx, q_values_list) in enumerate(context_dict.items()):
+            ax = axs[0, idx]
+            q_matrix = np.array(q_values_list)
+            im = ax.imshow(q_matrix, aspect='auto', cmap='viridis', interpolation='nearest')
+            ax.set_title(f'Context: {int(ctx[0])}')
+            ax.set_xlabel('Action')
+            ax.set_ylabel('Step')
+            fig.colorbar(im, ax=ax)
 
-        plt.imshow(
-            action_matrix,
-            aspect='auto',
-            extent=[x_vals[0], x_vals[-1], step_ids[0], step_ids[-1]],
-            origin='lower',
-            cmap='viridis'
-        )
-
-        # Overlay scatter1
-        scatter1 = plt.scatter(
-            data[:, 1], data[:, 0],
-            c=data[:, 2],
-            cmap="viridis",
-            alpha=0.6,
-            s=15,
-            edgecolors='black',
-            linewidths=0.2
-        )
-        plt.colorbar(scatter1, label="Action")
-        plt.xlabel("State")
-        plt.ylabel("Training Step / Reward")
-        plt.title("Best Action Heatmap and Scatter Overlay")
-        plt.grid(True)
-
-        # Bottom subplot: scatter2
-        plt.subplot(212)
-        scatter2 = plt.scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6)
-        plt.colorbar(scatter2, label="Action")
-        plt.xlabel("State")
-        plt.ylabel("Reward")
-        plt.grid(True)
-
-        plt.tight_layout()
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
         plt.show()
-
-        if args.logging:
-            wandb.log({"Reward Scatter": wandb.Image(scatter2)})
-
-def plot_env(env: gym.Env, arms: int):
-    state, _ = env.reset(seed=args.seed)
-
-    data = []
- 
-    for _ in range(1000):
-        action = env.action_space.sample()  # Random action
-        next_state, reward, _, _, _ = env.step(action)
-        state_index = float(state[0])
-        data.append([state_index, action, float(reward)])
-        state = next_state
-
-    data = np.array(data)
-
-    plt.figure(figsize=(12, 6))
-    scatter = plt.scatter(data[:, 0], data[:, 2], c=data[:, 1], cmap="viridis", alpha=0.6)
-    plt.colorbar(scatter, label="Action")
-    plt.xlabel("State")
-    plt.ylabel("Reward")
-    plt.grid(True)
-    plt.show()
-
+        wandb.log({"Q-value Heatmaps": wandb.Image(fig)})
 
 ####################################################################################################
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    print(args.seed)
     run_name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
-    if args.logging:wandb.init(
+    wandb.init(
         project=args.wandb_project_name,
         config=vars(args),
         name=run_name,
@@ -469,25 +410,9 @@ if __name__ == "__main__":
         min_suboptimal_mean=args.min_suboptimal_mean,
         max_suboptimal_mean=args.max_suboptimal_mean,
         suboptimal_std=args.suboptimal_std)
-    
-
-    plot_env(gym.make(
-            args.env_id,
-            arms=args.arms,
-            states=args.states,
-            optimal_arms=args.optimal_arms,
-            dynamic_rate=args.dynamic_rate,
-            pace=args.pace,
-            seed=args.seed,
-            optimal_mean=args.optimal_mean,
-            optimal_std=args.optimal_std,
-            min_suboptimal_mean=args.min_suboptimal_mean,
-            max_suboptimal_mean=args.max_suboptimal_mean,
-            suboptimal_std=args.suboptimal_std),
-        args.arms)
 
     agent = DQNAgent(env, args.memory_size, args.batch_size, args.target_update, args.seed, args.gamma)
-    agent.train(args.num_episodes)
-    agent.test(100)
+    agent.train(args.num_episodes, args.episode_length)
+    agent.test(args.episode_length)
 
-    if args.logging: wandb.finish()
+    wandb.finish()
