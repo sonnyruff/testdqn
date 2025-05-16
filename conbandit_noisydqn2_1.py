@@ -1,8 +1,8 @@
 """
-conbandit_noisydqn.py
+conbandit_noisydqn2_1.py
 
-A minimal implementation of a NoisyNet-DQN agent trained on a contextual bandit setting.
-This script uses PyTorch, Gymnasium, and Weights & Biases for logging, environment handling and visualization.
+NoisyNet-DQN implementation for ContextualBandit-v1 - Continuous input state
+Single loop version
 
 Author: Sonny Ruff
 Date: 12-05-2025
@@ -11,9 +11,6 @@ Based on:
 - NoisyNet-DQN implementation from https://nbviewer.org/github/Curt-Park/rainbow-is-all-you-need/blob/master/05.noisy_net.ipynb
 - Parts of https://github.com/knyazer/nanodqn/tree/main
 - OpenAI Gym (https://github.com/openai/gym) & Buffalo Gym environment (https://github.com/foreverska/buffalo-gym)
-
-Run with:
-    python conbandit_noisydqn.py --help
 """
 import os
 from datetime import datetime
