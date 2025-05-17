@@ -261,7 +261,7 @@ class DQNAgent:
                 q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
                 best_actions = np.argmax(q_values, axis=1)
                 arm_weights.append((step_id, best_actions))
-
+            
 
             # if training is ready
             if len(self.memory) >= self.batch_size:
@@ -392,7 +392,7 @@ class DQNAgent:
         )
         fig.colorbar(scatter1, ax=ax[0], label="Action")
         ax[0].set_xlabel("State")
-        ax[0].set_ylabel("Training Step / Reward")
+        ax[0].set_ylabel("Training Step")
         ax[0].set_title("Best Action Heatmap and Scatter Overlay")
         ax[0].grid(True)
 
