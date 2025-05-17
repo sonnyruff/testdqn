@@ -364,17 +364,15 @@ class DQNAgent:
 
         # ------------------------------------------------------
 
-        plt.figure(figsize=(15, 10))
+        fig, ax = plt.subplots(2, 1, figsize=(15, 10))
 
-        # Top subplot: overlay heatmap and scatter1
-        plt.subplot(211)
-
-        # Heatmap
+        # --- Top subplot: heatmap + scatter overlay ---
         step_ids = [step for step, _ in arm_weights]
         x_vals = np.linspace(-3, 3, 100)
-        action_matrix = np.stack([actions for _, actions in arm_weights], axis=0)  # shape: (num_steps, 100)
+        action_matrix = np.stack([actions for _, actions in arm_weights], axis=0)
 
-        plt.imshow(
+        # Heatmap
+        im = ax[0].imshow(
             action_matrix,
             aspect='auto',
             extent=[x_vals[0], x_vals[-1], step_ids[0], step_ids[-1]],
@@ -383,7 +381,7 @@ class DQNAgent:
         )
 
         # Overlay scatter1
-        scatter1 = plt.scatter(
+        scatter1 = ax[0].scatter(
             data[:, 1], data[:, 0],
             c=data[:, 2],
             cmap="viridis",
@@ -392,47 +390,61 @@ class DQNAgent:
             edgecolors='black',
             linewidths=0.2
         )
-        plt.colorbar(scatter1, label="Action")
-        plt.xlabel("State")
-        plt.ylabel("Training Step / Reward")
-        plt.title("Best Action Heatmap and Scatter Overlay")
-        plt.grid(True)
+        fig.colorbar(scatter1, ax=ax[0], label="Action")
+        ax[0].set_xlabel("State")
+        ax[0].set_ylabel("Training Step / Reward")
+        ax[0].set_title("Best Action Heatmap and Scatter Overlay")
+        ax[0].grid(True)
 
-        # Bottom subplot: scatter2
-        plt.subplot(212)
-        scatter2 = plt.scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6)
-        plt.colorbar(scatter2, label="Action")
-        plt.xlabel("State")
-        plt.ylabel("Reward")
-        plt.grid(True)
+
+        # --- Bottom subplot: second scatter ---
+        sample_data = sample_env(
+            gym.make(
+                args.env_id,
+                arms=args.arms,
+                states=args.states,
+                optimal_arms=args.optimal_arms,
+                dynamic_rate=args.dynamic_rate,
+                pace=args.pace,
+                seed=args.seed,
+                optimal_mean=args.optimal_mean,
+                optimal_std=args.optimal_std,
+                min_suboptimal_mean=args.min_suboptimal_mean,
+                max_suboptimal_mean=args.max_suboptimal_mean,
+                suboptimal_std=args.suboptimal_std), 
+            1000)
+
+        group_ids = np.unique(sample_data[:, 1])
+
+        for gid in group_ids:
+            group_mask = sample_data[:, 1] == gid
+            group_data = sample_data[group_mask]
+            sorted_indices = np.argsort(group_data[:, 0])
+            ax[1].plot(group_data[sorted_indices, 0], group_data[sorted_indices, 2], alpha=0.4, linewidth=1.5,)
+
+        scatter2 = ax[1].scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6)
+        fig.colorbar(scatter2, ax=ax[1], label="Action")
+        ax[1].set_xlabel("State")
+        ax[1].set_ylabel("Reward")
+        ax[1].grid(True)
+        ax[1].legend(loc="upper right", fontsize="small", ncol=2)
 
         plt.tight_layout()
         plt.show()
 
         if args.logging:
-            wandb.log({"Reward Scatter": wandb.Image(scatter2)})
+            wandb.log({"Reward Scatter": wandb.Image(fig)})
 
-def plot_env(env: gym.Env, arms: int):
+def sample_env(env, num_samples=1000): # somehow just sampling the reward functions didn't work
     state, _ = env.reset(seed=args.seed)
-
     data = []
- 
-    for _ in range(1000):
-        action = env.action_space.sample()  # Random action
+    for _ in range(num_samples):
+        action = env.action_space.sample()
         next_state, reward, _, _, _ = env.step(action)
         state_index = float(state[0])
         data.append([state_index, action, float(reward)])
         state = next_state
-
-    data = np.array(data)
-
-    plt.figure(figsize=(12, 6))
-    scatter = plt.scatter(data[:, 0], data[:, 2], c=data[:, 1], cmap="viridis", alpha=0.6)
-    plt.colorbar(scatter, label="Action")
-    plt.xlabel("State")
-    plt.ylabel("Reward")
-    plt.grid(True)
-    plt.show()
+    return np.array(data)
 
 
 ####################################################################################################
@@ -469,22 +481,7 @@ if __name__ == "__main__":
         min_suboptimal_mean=args.min_suboptimal_mean,
         max_suboptimal_mean=args.max_suboptimal_mean,
         suboptimal_std=args.suboptimal_std)
-    
 
-    plot_env(gym.make(
-            args.env_id,
-            arms=args.arms,
-            states=args.states,
-            optimal_arms=args.optimal_arms,
-            dynamic_rate=args.dynamic_rate,
-            pace=args.pace,
-            seed=args.seed,
-            optimal_mean=args.optimal_mean,
-            optimal_std=args.optimal_std,
-            min_suboptimal_mean=args.min_suboptimal_mean,
-            max_suboptimal_mean=args.max_suboptimal_mean,
-            suboptimal_std=args.suboptimal_std),
-        args.arms)
 
     agent = DQNAgent(env, args.memory_size, args.batch_size, args.target_update, args.seed, args.gamma)
     agent.train(args.num_episodes)
