@@ -261,7 +261,7 @@ class DQNAgent:
                 q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
                 best_actions = np.argmax(q_values, axis=1)
                 arm_weights.append((step_id, best_actions))
-            
+
 
             # if training is ready
             if len(self.memory) >= self.batch_size:
@@ -430,21 +430,21 @@ class DQNAgent:
         ax[1].legend(loc="upper right", fontsize="small", ncol=2)
 
         plt.tight_layout()
-        plt.show()
+        # plt.show()
 
         if args.logging:
             wandb.log({"Reward Scatter": wandb.Image(fig)})
 
 def sample_env(env, num_samples=1000): # somehow just sampling the reward functions didn't work
     state, _ = env.reset(seed=args.seed)
-    data = []
+    _data = []
     for _ in range(num_samples):
         action = env.action_space.sample()
         next_state, reward, _, _, _ = env.step(action)
         state_index = float(state[0])
-        data.append([state_index, action, float(reward)])
+        _data.append([state_index, action, float(reward)])
         state = next_state
-    return np.array(data)
+    return np.array(_data)
 
 
 ####################################################################################################
@@ -481,7 +481,6 @@ if __name__ == "__main__":
         min_suboptimal_mean=args.min_suboptimal_mean,
         max_suboptimal_mean=args.max_suboptimal_mean,
         suboptimal_std=args.suboptimal_std)
-
 
     agent = DQNAgent(env, args.memory_size, args.batch_size, args.target_update, args.seed, args.gamma)
     agent.train(args.num_episodes)

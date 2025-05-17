@@ -252,8 +252,14 @@ class DQNAgent:
             state = next_state
             score += reward
 
-            q_values = self.dqn(torch.FloatTensor(state).to(self.device)).detach().cpu().numpy()
-            arm_weights.append((state.astype(int), q_values))
+
+            if step_id % 10 == 0:
+                x = np.linspace(-3, 3, 100)
+                # put each x value forward through the network
+                q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
+                best_actions = np.argmax(q_values, axis=1)
+                arm_weights.append((step_id, best_actions))
+
 
             # if training is ready
             if len(self.memory) >= self.batch_size:
@@ -354,77 +360,89 @@ class DQNAgent:
         plt.xlabel('Training Steps')
         plt.ylabel('Loss')
 
-        # context_dict = {}
-        # for state, q_values in arm_weights:
-        #     ctx_key = tuple(state)
-        #     if ctx_key not in context_dict:
-        #         context_dict[ctx_key] = []
-        #     context_dict[ctx_key].append(q_values)
+        # ------------------------------------------------------
 
-        # n_contexts = len(context_dict)
-        # fig, axs = plt.subplots(1, n_contexts, figsize=(3 * n_contexts, 5), squeeze=False)
-        # fig.suptitle("Arm selection heatmaps by Context", fontsize=16)
+        fig, ax = plt.subplots(2, 1, figsize=(15, 10))
 
-        # for idx, (ctx, q_values_list) in enumerate(context_dict.items()):
-        #     ax = axs[0, idx]
-        #     q_matrix = np.array(q_values_list)
-        #     im = ax.imshow(q_matrix, aspect='auto', cmap='viridis', interpolation='nearest')
-        #     ax.set_title(f'Context: {int(ctx[0])}')
-        #     ax.set_xlabel('Action Index')
-        #     ax.set_ylabel('Training Step')
-        #     fig.colorbar(im, ax=ax)
+        # --- Top subplot: heatmap + scatter overlay ---
+        step_ids = [step for step, _ in arm_weights]
+        x_vals = np.linspace(-3, 3, 100)
+        action_matrix = np.stack([actions for _, actions in arm_weights], axis=0)
 
-        # plt.tight_layout(rect=[0, 0, 1, 0.95])
-        # if args.logging: wandb.log({"Q-value Heatmaps": wandb.Image(fig)})
+        # Heatmap
+        im = ax[0].imshow(
+            action_matrix,
+            aspect='auto',
+            extent=[x_vals[0], x_vals[-1], step_ids[0], step_ids[-1]],
+            origin='lower',
+            cmap='viridis'
+        )
 
-        plt.figure(figsize=(15, 10))
-        plt.subplot(211)
-        scatter1 = plt.scatter(data[:, 1], data[:, 0], c=data[:, 2], cmap="viridis", alpha=0.6)
-        plt.colorbar(scatter1, label="Action")
-        plt.xlabel("State")
-        plt.ylabel("Reward")
-        plt.grid(True)
+        # Overlay scatter1
+        scatter1 = ax[0].scatter(
+            data[:, 1], data[:, 0],
+            c=data[:, 2],
+            cmap="viridis",
+            alpha=0.6,
+            s=15,
+            edgecolors='black',
+            linewidths=0.2
+        )
+        fig.colorbar(scatter1, ax=ax[0], label="Action")
+        ax[0].set_xlabel("State")
+        ax[0].set_ylabel("Training Step")
+        ax[0].set_title("Best Action Heatmap and Scatter Overlay")
+        ax[0].grid(True)
 
-        alphas = [x/data.shape[0] for x in range(data.shape[0])]
 
-        plt.subplot(212)
-        scatter2 = plt.scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=alphas)
-        plt.colorbar(scatter2, label="Action")
-        plt.xlabel("State")
-        plt.ylabel("Reward")
-        plt.grid(True)
+        # --- Bottom subplot: second scatter ---
+        sample_data = sample_env(
+            gym.make(
+                args.env_id,
+                arms=args.arms,
+                states=args.states,
+                optimal_arms=args.optimal_arms,
+                dynamic_rate=args.dynamic_rate,
+                pace=args.pace,
+                seed=args.seed,
+                optimal_mean=args.optimal_mean,
+                optimal_std=args.optimal_std,
+                min_suboptimal_mean=args.min_suboptimal_mean,
+                max_suboptimal_mean=args.max_suboptimal_mean,
+                suboptimal_std=args.suboptimal_std), 
+            1000)
+
+        group_ids = np.unique(sample_data[:, 1])
+
+        for gid in group_ids:
+            group_mask = sample_data[:, 1] == gid
+            group_data = sample_data[group_mask]
+            sorted_indices = np.argsort(group_data[:, 0])
+            ax[1].plot(group_data[sorted_indices, 0], group_data[sorted_indices, 2], alpha=0.4, linewidth=1.5,)
+
+        scatter2 = ax[1].scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6)
+        fig.colorbar(scatter2, ax=ax[1], label="Action")
+        ax[1].set_xlabel("State")
+        ax[1].set_ylabel("Reward")
+        ax[1].grid(True)
+        ax[1].legend(loc="upper right", fontsize="small", ncol=2)
+
+        plt.tight_layout()
         # plt.show()
-        if args.logging: wandb.log({"Reward Scatter": wandb.Image(scatter)})
 
+        if args.logging:
+            wandb.log({"Reward Scatter": wandb.Image(fig)})
 
-
-        # num_state_bins = 50
-        # num_step_bins = 50
-
-        # # Create 2D bins
-        # state_vals = data[:, 1]
-        # step_vals = data[:, 0]
-        # action_vals = data[:, 2]
-
-        # heatmap, xedges, yedges = np.histogram2d(
-        #     state_vals, step_vals, bins=[num_state_bins, num_step_bins], weights=action_vals
-        # )
-        # counts, _, _ = np.histogram2d(state_vals, step_vals, bins=[xedges, yedges])
-
-        # # Avoid divide-by-zero
-        # heatmap_avg = np.divide(heatmap, counts, where=counts != 0)
-
-        # # Plot the heatmap
-        # plt.figure(figsize=(12, 6))
-        # extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
-        # plt.imshow(heatmap_avg.T, extent=extent, origin='lower', aspect='auto', cmap="viridis")
-        # plt.colorbar(label="Average Action")
-        # plt.xlabel("State")
-        # plt.ylabel("Step")
-        # plt.title("Heatmap of Average Action (State vs Step)")
-        # plt.grid(False)
-        plt.show()
-
+def sample_env(env, num_samples=1000): # somehow just sampling the reward functions didn't work
+    state, _ = env.reset(seed=args.seed)
+    _data = []
+    for _ in range(num_samples):
+        action = env.action_space.sample()
+        next_state, reward, _, _, _ = env.step(action)
+        state_index = float(state[0])
+        _data.append([state_index, action, float(reward)])
+        state = next_state
+    return np.array(_data)
 
 
 ####################################################################################################
