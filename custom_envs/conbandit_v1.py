@@ -21,9 +21,14 @@ class ConbanditEnv1(gym.Env):
     def reward(self, state: float, action: int) -> float:
         # LINEAR
         # return self.intercepts[action] + self.slopes[action] * state
+
         # SIGMOID
         return 1 / (1 + np.exp(-self.intercepts[action] - self.slopes[action] * state))
-        # return 1 / (1 + np.exp((state - self.intercepts[action]*3) * self.slopes[action] * 5))
+
+        # NORMAL PDF
+        # mean = self.intercepts[action]
+        # std_dev = self.slopes[action]
+        # return (1 / (std_dev * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((state - mean) / std_dev) ** 2)
 
     def __draw_arms(self):
         """
