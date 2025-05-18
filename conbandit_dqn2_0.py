@@ -480,7 +480,14 @@ if __name__ == "__main__":
         max_suboptimal_mean=args.max_suboptimal_mean,
         suboptimal_std=args.suboptimal_std)
 
-    agent = DQNAgent(env, args.memory_size, args.batch_size, args.target_update, args.seed, args.gamma)
+    agent = DQNAgent(
+        env,
+        args.memory_size,
+        args.batch_size,
+        args.target_update,
+        args.seed,
+        args.gamma
+    )
     agent.train(args.num_episodes)
     agent.test(100)
 
