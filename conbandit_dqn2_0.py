@@ -204,7 +204,7 @@ class DQNAgent:
         
         return selected_action
 
-    def step(self, state: np.ndarray, action: np.ndarray) -> float:
+    def step(self, state: np.ndarray, action: np.ndarray) -> Tuple[np.ndarray, float]:
         """Take an action and return the response of the env."""
         next_state, reward, _, _, _ = self.env.step(action)
         # done = terminated or truncated
@@ -237,6 +237,7 @@ class DQNAgent:
         scores = []
         arm_weights = []
         data = []
+        epsilons = []
 
         state, _ = self.env.reset(seed=self.seed)
 
@@ -251,7 +252,7 @@ class DQNAgent:
 
             state = next_state
             score += reward
-
+            epsilons.append(epsilon)
 
             if step_id % 10 == 0:
                 x = np.linspace(-3, 3, 100)
@@ -281,7 +282,7 @@ class DQNAgent:
             if args.logging: wandb.log({"score": score})
                 
         self.env.close()
-        self._plot(scores, losses, arm_weights, np.array(data))
+        self._plot(scores, losses, arm_weights, np.array(data), epsilons)
         
     def test(self, episode_length) -> None:
         """Test the agent."""
@@ -344,7 +345,8 @@ class DQNAgent:
         scores: List[float], 
         losses: List[float],
         arm_weights: List[np.ndarray],
-        data: np.ndarray
+        data: np.ndarray,
+        epsilons: List[float]
     ):
         """Plot the training progresses."""
         plt.figure(figsize=(15, 5))
@@ -359,6 +361,10 @@ class DQNAgent:
         plt.plot(losses)
         plt.xlabel('Training Steps')
         plt.ylabel('Loss')
+
+
+        plt.figure(figsize=(10, 10))
+        plt.plot(epsilons)
 
         # ------------------------------------------------------
 
@@ -428,7 +434,7 @@ class DQNAgent:
         ax[1].legend(loc="upper right", fontsize="small", ncol=2)
 
         plt.tight_layout()
-        # plt.show()
+        plt.show()
 
         if args.logging:
             wandb.log({"Reward Scatter": wandb.Image(fig)})
