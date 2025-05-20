@@ -89,8 +89,8 @@ class Network(nn.Module):
     
     def reset_noise(self):
         """Reset all noisy layers."""
-        self.noisy_layer1.reset_noise()
-        self.noisy_layer2.reset_noise()
+        self.noisy_layer1.resample_noise()
+        self.noisy_layer2.resample_noise()
 
 class ReplayBuffer:
     """A simple numpy replay buffer."""

@@ -30,7 +30,6 @@ import wandb
 import tyro
 
 import custom_envs
-from NoisyLinear import NoisyLinear
 
 ####################################################################################################
 
@@ -173,9 +172,9 @@ class DQNAgent:
 
         # networks: dqn, dqn_target
         self.dqn = Network(obs_dim, action_dim).to(self.device)
-        self.dqn_target = Network(obs_dim, action_dim).to(self.device)
-        self.dqn_target.load_state_dict(self.dqn.state_dict())
-        self.dqn_target.eval()
+        # self.dqn_target = Network(obs_dim, action_dim).to(self.device)
+        # self.dqn_target.load_state_dict(self.dqn.state_dict())
+        # self.dqn_target.eval()
 
         print(self.dqn)
         
@@ -214,18 +213,6 @@ class DQNAgent:
             self.memory.store(state, action, reward)
     
         return next_state, reward
-
-    def update_model(self) -> torch.Tensor:
-        """Update the model by gradient descent."""
-        samples = self.memory.sample_batch()
-
-        loss = self._compute_dqn_loss(samples)
-
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-
-        return loss.item()
         
     def train(self, num_episodes: int):
         """Train the agent."""
@@ -264,7 +251,16 @@ class DQNAgent:
 
             # if training is ready
             if len(self.memory) >= self.batch_size:
-                loss = self.update_model()
+                samples = self.memory.sample_batch()
+
+                loss = self._compute_dqn_loss(samples)
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                loss = loss.item()
+                
                 losses.append(loss)
 
                 # Decay epsilon
@@ -275,8 +271,8 @@ class DQNAgent:
                 update_cnt += 1
                 
                 # if hard update is needed
-                if update_cnt % self.target_update == 0:
-                    self._target_hard_update()
+                # if update_cnt % self.target_update == 0:
+                #     self._target_hard_update()
             
             scores.append(score)
             if args.logging: wandb.log({"score": score})
@@ -336,9 +332,9 @@ class DQNAgent:
 
         return loss
 
-    def _target_hard_update(self):
-        """Hard update: target <- local."""
-        self.dqn_target.load_state_dict(self.dqn.state_dict())
+    # def _target_hard_update(self):
+    #     """Hard update: target <- local."""
+    #     self.dqn_target.load_state_dict(self.dqn.state_dict())
 
     def _plot(
         self,
