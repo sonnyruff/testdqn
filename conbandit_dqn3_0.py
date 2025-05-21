@@ -160,12 +160,9 @@ class DQNAgent:
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        print(self.device)
 
         # networks: dqn, dqn_target
         self.dqn = Network(obs_dim, action_dim).to(self.device)
-
-        print(self.dqn)
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
@@ -228,11 +225,13 @@ class DQNAgent:
             epsilons.append(epsilon)
 
             if step_id % 10 == 0:
+                ## Scatterplot background ======
                 x = np.linspace(-3, 3, 100)
                 # put each x value forward through the network
                 q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
                 best_actions = np.argmax(q_values, axis=1)
                 arm_weights.append((step_id, best_actions))
+                ## =============================
 
                 # score += sum(rewards[-50:])
                 score += np.mean(rewards[-50:])
@@ -244,17 +243,11 @@ class DQNAgent:
                 samples = self.memory.sample_batch()
 
                 loss = self._compute_dqn_loss(samples)
-
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-                loss = loss.item()
                 
                 losses.append(loss)
 
                 # Decay epsilon
-                epsilon = max(epsilon - 1/num_episodes, 0)
+                epsilon = max(epsilon - 2/num_episodes, 0)
                 # epsilon = max(epsilon - 1/500, 0)
 
                 if args.logging: wandb.log({"loss": loss})
@@ -301,7 +294,11 @@ class DQNAgent:
         curr_q_value = self.dqn(state).gather(1, action)
         loss = F.mse_loss(curr_q_value, reward)
 
-        return loss
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        return loss.item()
 
     def _plot(
         self,
@@ -399,7 +396,6 @@ class DQNAgent:
         ax[1].set_xlabel("State")
         ax[1].set_ylabel("Reward")
         ax[1].grid(True)
-        ax[1].legend(loc="upper right", fontsize="small", ncol=2)
 
         plt.tight_layout()
         plt.show()
@@ -424,7 +420,6 @@ def sample_env(env, num_samples=1000):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    print(args.seed)
     run_name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
     if args.logging:wandb.init(
         project=args.wandb_project_name,
@@ -462,6 +457,9 @@ if __name__ == "__main__":
         args.seed,
         args.gamma
     )
+
+    print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")
+
     agent.train(args.num_episodes)
     agent.test(100)
 
