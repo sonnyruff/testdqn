@@ -15,20 +15,18 @@ class ConbanditEnv1(gym.Env):
     """
     metadata = {'render_modes': []}
 
-    # def sigmoid(self, z, a):
-    #     return 1 / (1 + np.exp(-z + a))
-
     def reward(self, state: float, action: int) -> float:
         # LINEAR
         # return self.intercepts[action] + self.slopes[action] * state
 
         # SIGMOID
-        return 1 / (1 + np.exp(-self.intercepts[action] - self.slopes[action] * state))
+        # return 1 / (1 + np.exp(-self.intercepts[action] - self.slopes[action] * state))
 
         # NORMAL PDF
-        # mean = self.intercepts[action]
-        # std_dev = self.slopes[action]
-        # return (1 / (std_dev * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((state - mean) / std_dev) ** 2)
+        mean = self.intercepts[action]
+        std_dev = self.slopes[action]
+        # std_dev = 0.1
+        return (1 / (std_dev * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((state - mean) / std_dev) ** 2)
 
     def __draw_arms(self):
         """

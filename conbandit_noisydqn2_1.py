@@ -411,8 +411,9 @@ class DQNAgent:
                 optimal_std=args.optimal_std,
                 min_suboptimal_mean=args.min_suboptimal_mean,
                 max_suboptimal_mean=args.max_suboptimal_mean,
-                suboptimal_std=args.suboptimal_std), 
-            1000)
+                suboptimal_std=args.suboptimal_std
+            )
+        )
 
         group_ids = np.unique(sample_data[:, 1])
 
@@ -440,7 +441,7 @@ class DQNAgent:
         if args.logging:
             wandb.log({"Reward Scatter": wandb.Image(fig)})
 
-def sample_env(env, num_samples=1000): # somehow just sampling the reward functions didn't work
+def sample_env(env, num_samples=10000): # somehow just sampling the reward functions didn't work
     state, _ = env.reset(seed=args.seed)
     _data = []
     for _ in range(num_samples):
