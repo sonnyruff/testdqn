@@ -23,7 +23,7 @@ class ConbanditEnv1(gym.Env):
         # return self.intercepts[action] + self.slopes[action] * state
 
         # SIGMOID
-        return 1 / (1 + np.exp(-self.intercepts[action] - self.slopes[action] * state))
+        return (1 / (1 + np.exp(-self.intercepts[action] - self.slopes[action] * state))).item()
 
         # NORMAL PDF
         # mean = self.intercepts[action]
