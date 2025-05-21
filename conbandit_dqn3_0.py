@@ -388,7 +388,12 @@ class DQNAgent:
             sorted_indices = np.argsort(group_data[:, 0])
             ax[1].plot(group_data[sorted_indices, 0], group_data[sorted_indices, 2], alpha=0.4, linewidth=1.5,)
 
-        scatter2 = ax[1].scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6)
+        timesteps = data[:, 0]
+        # normalized = (timesteps - timesteps.min()) / (timesteps.max() - timesteps.min() + 1e-8)
+        # size = 80 * normalized
+        size = 80 * timesteps / (timesteps.max() - timesteps.min())
+
+        scatter2 = ax[1].scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6, s=size)
         fig.colorbar(scatter2, ax=ax[1], label="Action")
         ax[1].set_xlabel("State")
         ax[1].set_ylabel("Reward")
