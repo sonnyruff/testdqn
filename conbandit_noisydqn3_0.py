@@ -1,6 +1,4 @@
 """
-conbandit_noisydqn2_1.py
-
 NoisyNet-DQN implementation for ContextualBandit-v1 - Continuous input state
 Single loop version
 Single network
@@ -234,6 +232,7 @@ class DQNAgent:
                 arm_weights.append((step_id, best_actions))
                 ## =============================
 
+            if step_id % 50 == 0:
                 # score += sum(rewards[-50:])
                 score += np.mean(rewards[-50:])
                 scores.append(score)
@@ -260,6 +259,7 @@ class DQNAgent:
                 
                 update_cnt += 1
                 
+        print(f"Mean rewards: {np.mean(rewards)}")
         self.env.close()
         self._plot(scores, losses, arm_weights, np.array(data))
         
