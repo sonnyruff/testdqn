@@ -147,9 +147,7 @@ class DQNAgent:
             batch_size (int): batch size for sampling
             gamma (float): discount factor
         """
-        # NoisyNet: All attributes related to epsilon are removed
         obs_dim = env.observation_space.shape[0]
-        # obs_dim = env.unwrapped.states # WRONG
         action_dim = env.action_space.n
         
         self.env = env
@@ -208,6 +206,7 @@ class DQNAgent:
         
         update_cnt = 0
         losses = []
+        rewards = []
         scores = []
         arm_weights = []
         data = []
@@ -224,8 +223,8 @@ class DQNAgent:
 
             data.append([step_id, float(state[0]), action, float(reward)])
 
+            rewards.append(reward)
             state = next_state
-            score += reward
             epsilons.append(epsilon)
 
             if step_id % 10 == 0:
@@ -235,6 +234,10 @@ class DQNAgent:
                 best_actions = np.argmax(q_values, axis=1)
                 arm_weights.append((step_id, best_actions))
 
+                # score += sum(rewards[-50:])
+                score += np.mean(rewards[-50:])
+                scores.append(score)
+                if args.logging: wandb.log({"score": score})
 
             # if training is ready
             if len(self.memory) >= self.batch_size:
@@ -252,13 +255,11 @@ class DQNAgent:
 
                 # Decay epsilon
                 epsilon = max(epsilon - 1/num_episodes, 0)
+                # epsilon = max(epsilon - 1/500, 0)
 
                 if args.logging: wandb.log({"loss": loss})
                 
                 update_cnt += 1
-            
-            scores.append(score)
-            if args.logging: wandb.log({"score": score})
                 
         self.env.close()
         self._plot(scores, losses, arm_weights, np.array(data), epsilons)

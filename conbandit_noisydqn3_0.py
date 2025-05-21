@@ -206,6 +206,7 @@ class DQNAgent:
         
         update_cnt = 0
         losses = []
+        rewards = []
         scores = []
         arm_weights = []
         data = []
@@ -223,8 +224,8 @@ class DQNAgent:
 
             data.append([step_id, float(state[0]), action, float(reward)])
 
+            rewards.append(reward)
             state = next_state
-            score += reward
 
 
             if step_id % 10 == 0:
@@ -234,11 +235,15 @@ class DQNAgent:
                 best_actions = np.argmax(q_values, axis=1)
                 arm_weights.append((step_id, best_actions))
 
+                # score += sum(rewards[-50:])
+                score += np.mean(rewards[-50:])
+                scores.append(score)
+                if args.logging: wandb.log({"score": score})
 
             # if training is ready
             if len(self.memory) >= self.batch_size:
                 samples = self.memory.sample_batch()
-
+                
                 # self.dqn.resample_noise()
                 
                 loss = self._compute_dqn_loss(samples)
@@ -261,9 +266,6 @@ class DQNAgent:
                 })
                 
                 update_cnt += 1
-            
-            scores.append(score)
-            if args.logging: wandb.log({"score": score})
                 
         self.env.close()
         self._plot(scores, losses, arm_weights, np.array(data))
