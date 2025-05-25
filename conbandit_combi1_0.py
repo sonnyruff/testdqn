@@ -10,12 +10,23 @@ Based on:
 - NoisyNet-DQN implementation from https://nbviewer.org/github/Curt-Park/rainbow-is-all-you-need/blob/master/05.noisy_net.ipynb
 - Parts of https://github.com/knyazer/nanodqn/tree/main
 - OpenAI Gym (https://github.com/openai/gym) & Buffalo Gym environment (https://github.com/foreverska/buffalo-gym)
+
+e.g.
+ - Environment visualisation is only available for 1 dimension
+    py conbandit_combi1_0.py --network-type NOISY
+ - More dimensions only show a reward and loss plot
+    py conbandit_combi1_0.py --network-type NOISY --dims 20
+ - The network with regular linear layers provide an epsilon history plot
+    py conbandit_combi1_0.py --network-type REGULAR
+ - Non-static environements
+    py conbandit_combi1_0.py --network-type REGULAR --dims 1 --dynamic-rate 100 
+
+    py conbandit_combi1_0.py --seed 8796 --no-logging --network-type NOISY --dims 20    
 """
 import os
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
-import random
 from enum import Enum
 
 import gymnasium as gym
@@ -81,8 +92,8 @@ class NoisyNetwork(nn.Module):
         """Initialization."""
         super(NoisyNetwork, self).__init__()
 
-        self.feature = nn.Linear(in_dim, out_dim)
-        self.noisy_layer1 = NoisyLinear(out_dim, out_dim)
+        self.feature = nn.Linear(in_dim, in_dim)
+        self.noisy_layer1 = NoisyLinear(in_dim, out_dim)
         self.noisy_layer2 = NoisyLinear(out_dim, out_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -103,8 +114,8 @@ class Network(nn.Module):
         """Initialization."""
         super(Network, self).__init__()
 
-        self.feature = nn.Linear(in_dim, out_dim)
-        self.layer1 = nn.Linear(out_dim, out_dim)
+        self.feature = nn.Linear(in_dim, in_dim)
+        self.layer1 = nn.Linear(in_dim, out_dim)
         self.layer2 = nn.Linear(out_dim, out_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -207,7 +218,7 @@ class DQNAgent:
 
     def select_action(self, state: np.ndarray, epsilon: float) -> np.ndarray:
         """Select an action from the input state."""
-        if random.random() < epsilon and args.network_type == NetworkType.REGULAR:
+        if np.random.rand() < epsilon and args.network_type == NetworkType.REGULAR:
             selected_action = self.env.action_space.sample()
         else:
             selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
@@ -471,7 +482,7 @@ if __name__ == "__main__":
         monitor_gym=True,
         save_code=True,
     )
-
+        
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     if torch.backends.cudnn.enabled:
