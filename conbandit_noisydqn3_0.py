@@ -40,19 +40,23 @@ class Args:
     """seed of the experiment"""
     wandb_project_name: str = "noisynet-dqn"
     """the wandb's project name"""
+    plotting: bool = False
+    """whether to plot the results"""
+    show_plot: bool = False
+    """whether to show the plot"""
     logging: bool = True
     """whether to log to wandb"""
 
     env_id: str = "ContextualBandit-v1"
     """the id of the environment"""
-    num_episodes: int = 3000
+    num_episodes: int = 2000
     """the number of episodes to run"""
     memory_size: int = 1000
     """the replay memory buffer size"""
-    gamma: float = 0.99
-    """the discount factor gamma"""
     batch_size: int = 50
     """the batch size of sample from the reply memory"""
+
+    hidden_layer_size: int = 6
 
     arms: int = 10
     states: int = 2
@@ -68,26 +72,23 @@ class Args:
 ####################################################################################################
 
 class Network(nn.Module):
-    def __init__(self, in_dim: int, out_dim: int):
-        """Initialization."""
-        super(Network, self).__init__()
-
-        self.feature = nn.Linear(in_dim, out_dim)
-        self.noisy_layer1 = NoisyLinear(out_dim, out_dim)
-        self.noisy_layer2 = NoisyLinear(out_dim, out_dim)
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.ReLU(),
+            NoisyLinear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            NoisyLinear(hidden_dim, out_dim)
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward method implementation."""
-        feature = F.relu(self.feature(x))
-        hidden = F.relu(self.noisy_layer1(feature))
-        out = self.noisy_layer2(hidden)
-        
-        return out
-    
+        return self.net(x)
+
     def resample_noise(self):
-        """Reset all noisy layers."""
-        self.noisy_layer1.resample_noise()
-        self.noisy_layer2.resample_noise()
+        for layer in self.net:
+            if isinstance(layer, NoisyLinear):
+                layer.resample_noise()
 
 class ReplayBuffer:
     """A simple numpy replay buffer."""
@@ -127,7 +128,6 @@ class DQNAgent:
         env (gym.Env): openAI Gym environment
         memory (ReplayBuffer): replay memory to store transitions
         batch_size (int): batch size for sampling
-        gamma (float): discount factor
         dqn (Network): model to train and select actions
         optimizer (torch.optim): optimizer for training dqn
         transition (list): transition information including
@@ -143,9 +143,7 @@ class DQNAgent:
         
         Args:
             env (gym.Env): openAI Gym environment
-            memory_size (int): length of memory
-            batch_size (int): batch size for sampling
-            gamma (float): discount factor
+            args (Args): arguments
         """
         obs_dim = env.observation_space.shape[0]
         action_dim = env.action_space.n
@@ -160,7 +158,7 @@ class DQNAgent:
         )
 
         # networks: dqn
-        self.dqn = Network(obs_dim, action_dim).to(self.device)
+        self.dqn = Network(obs_dim, 2**self.args.hidden_layer_size, action_dim).to(self.device)
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
@@ -240,24 +238,25 @@ class DQNAgent:
                 self.dqn.resample_noise() # line 13
                 
                 loss = self._compute_dqn_loss(samples)
-                
                 losses.append(loss)
                 if self.args.logging: wandb.log({"loss": loss})
-                noise_l1 = self.dqn.noisy_layer1.get_noise()
-                noise_l2 = self.dqn.noisy_layer2.get_noise()
-                if self.args.logging:
-                    wandb.log({
-                        "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
-                        "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
-                        "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
-                        "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
-                    })
+
+                # noise_l1 = self.dqn.noisy_layer1.get_noise()
+                # noise_l2 = self.dqn.noisy_layer2.get_noise()
+                # if self.args.logging:
+                #     wandb.log({
+                #         "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
+                #         "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
+                #         "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
+                #         "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
+                #     })
                 
                 update_cnt += 1
                 
         print(f"Mean rewards: {np.mean(rewards)}")
+        if self.args.logging: wandb.run.summary["mean_rewards"] = np.mean(rewards)
         self.env.close()
-        self._plot(scores, losses, arm_weights, np.array(data))
+        if self.args.plotting: self._plot(scores, losses, arm_weights, np.array(data))
         
     def test(self, episode_length) -> None:
         """Test the agent."""
@@ -392,7 +391,7 @@ class DQNAgent:
         ax[1].grid(True)
 
         plt.tight_layout()
-        plt.show()
+        if self.args.show_plot: plt.show()
 
         if self.args.logging:
             wandb.log({"Reward Scatter": wandb.Image(fig)})
@@ -444,10 +443,7 @@ if __name__ == "__main__":
         max_suboptimal_mean=args.max_suboptimal_mean,
         suboptimal_std=args.suboptimal_std)
 
-    agent = DQNAgent(
-        env,
-        args
-    )
+    agent = DQNAgent(env, args)
 
     print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")
 
@@ -456,30 +452,16 @@ if __name__ == "__main__":
 
     if args.logging: wandb.finish()
 
-
-
 ####################################################################################################
 
 def wandb_sweep():
     with wandb.init() as run:
         config = wandb.config
 
-        # args = tyro.cli(Args)
-
-        # args.seed = config.seed
-        # args.batch_size = config.batch_size
-        # args.memory_size = config.memory_size
-        # args.optimal_std = config.optimal_std
-        # args.max_suboptimal_mean = config.max_suboptimal_mean
-        # args.logging = True
-
         args = Args(
-            seed=config.seed,
             batch_size=config.batch_size,
             memory_size=config.memory_size,
-            optimal_std=config.optimal_std,
-            max_suboptimal_mean=config.max_suboptimal_mean,
-            logging=True
+            hidden_layer_size=config.hidden_layer_size,
         )
 
         run.name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
@@ -501,9 +483,6 @@ def wandb_sweep():
             max_suboptimal_mean=args.max_suboptimal_mean,
             suboptimal_std=args.suboptimal_std)
 
-        agent = DQNAgent(
-            env,
-            args
-        )
+        agent = DQNAgent(env, args)
         agent.train(args.num_episodes)
-        agent.test(100)
+        # agent.test(100)

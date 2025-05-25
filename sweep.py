@@ -5,18 +5,16 @@ wandb.login()
 
 sweep_config = {
     "method": "random",
-    "metric": {"name": "score", "goal": "maximize"},
+    "metric": {"name": "mean_rewards", "goal": "maximize"},
     "parameters": {
-        "seed": {"min": 0, "max": 10000},
         "batch_size": {"values": [32, 64]},
-        "memory_size": {"values": [500, 1000]},
-        "optimal_std": {"values": [0.5, 1.0]},
-        "max_suboptimal_mean": {"values": [3, 5]}
+        "memory_size": {"values": [100, 1000]},
+        "hidden_layer_size": {"min": 4, "max": 9}, # e.g. 2**6 = 64
     }
 }
 
 # Initialize sweep
-sweep_id = wandb.sweep(sweep=sweep_config, project="noisynet-dqn")
+sweep_id = wandb.sweep(sweep=sweep_config, project="noisynet-dqn-new")
 
 # Launch agent with training function
-wandb.agent(sweep_id, function=wandb_sweep, count=2)
+wandb.agent(sweep_id, function=wandb_sweep, count=100)
