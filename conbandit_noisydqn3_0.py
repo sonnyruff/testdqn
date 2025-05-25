@@ -137,10 +137,7 @@ class DQNAgent:
     def __init__(
         self, 
         env: gym.Env,
-        memory_size: int,
-        batch_size: int,
-        seed: int,
-        gamma: float = 0.99,
+        args: Args = None
     ):
         """Initialization.
         
@@ -154,17 +151,15 @@ class DQNAgent:
         action_dim = env.action_space.n
         
         self.env = env
-        self.memory = ReplayBuffer(obs_dim, memory_size, batch_size)
-        self.batch_size = batch_size
-        self.seed = seed
-        self.gamma = gamma
+        self.args = args
+        self.memory = ReplayBuffer(obs_dim, self.args.memory_size, self.args.batch_size)
         
         # device: cpu / gpu
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
 
-        # networks: dqn, dqn_target
+        # networks: dqn
         self.dqn = Network(obs_dim, action_dim).to(self.device)
         
         # optimizer
@@ -206,7 +201,7 @@ class DQNAgent:
         arm_weights = []
         data = []
 
-        state, _ = self.env.reset(seed=self.seed)
+        state, _ = self.env.reset(seed=self.args.seed)
 
         # Double loop isn't necessary
         for step_id in tqdm(range(1, num_episodes + 1)):
@@ -236,10 +231,10 @@ class DQNAgent:
                 # score += sum(rewards[-50:])
                 score += np.mean(rewards[-50:])
                 scores.append(score)
-                if args.logging: wandb.log({"score": score})
+                if self.args.logging: wandb.log({"score": score})
 
             # if training is ready
-            if len(self.memory) >= self.batch_size:
+            if len(self.memory) >= self.args.batch_size:
                 samples = self.memory.sample_batch() # line 12
                 
                 self.dqn.resample_noise() # line 13
@@ -247,15 +242,16 @@ class DQNAgent:
                 loss = self._compute_dqn_loss(samples)
                 
                 losses.append(loss)
-                if args.logging: wandb.log({"loss": loss})
+                if self.args.logging: wandb.log({"loss": loss})
                 noise_l1 = self.dqn.noisy_layer1.get_noise()
                 noise_l2 = self.dqn.noisy_layer2.get_noise()
-                if args.logging: wandb.log({
-                    "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
-                    "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
-                    "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
-                    "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
-                })
+                if self.args.logging:
+                    wandb.log({
+                        "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
+                        "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
+                        "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
+                        "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
+                    })
                 
                 update_cnt += 1
                 
@@ -362,18 +358,18 @@ class DQNAgent:
         # --- Bottom subplot: second scatter ---
         sample_data = sample_env(
             gym.make(
-                args.env_id,
-                arms=args.arms,
-                states=args.states,
-                optimal_arms=args.optimal_arms,
-                dynamic_rate=args.dynamic_rate,
-                pace=args.pace,
-                seed=args.seed,
-                optimal_mean=args.optimal_mean,
-                optimal_std=args.optimal_std,
-                min_suboptimal_mean=args.min_suboptimal_mean,
-                max_suboptimal_mean=args.max_suboptimal_mean,
-                suboptimal_std=args.suboptimal_std), 
+                self.args.env_id,
+                arms=self.args.arms,
+                states=self.args.states,
+                optimal_arms=self.args.optimal_arms,
+                dynamic_rate=self.args.dynamic_rate,
+                pace=self.args.pace,
+                seed=self.args.seed,
+                optimal_mean=self.args.optimal_mean,
+                optimal_std=self.args.optimal_std,
+                min_suboptimal_mean=self.args.min_suboptimal_mean,
+                max_suboptimal_mean=self.args.max_suboptimal_mean,
+                suboptimal_std=self.args.suboptimal_std), 
             1000)
 
         group_ids = np.unique(sample_data[:, 1])
@@ -398,16 +394,16 @@ class DQNAgent:
         plt.tight_layout()
         plt.show()
 
-        if args.logging:
+        if self.args.logging:
             wandb.log({"Reward Scatter": wandb.Image(fig)})
 
-def sample_env(env, num_samples=1000):
+def sample_env(_env, num_samples=1000):
     """somehow just sampling the reward functions didn't work"""
-    state, _ = env.reset(seed=args.seed)
+    state, _ = _env.reset()
     _data = []
     for _ in range(num_samples):
-        action = env.action_space.sample()
-        next_state, reward, _, _, _ = env.step(action)
+        action = _env.action_space.sample()
+        next_state, reward, _, _, _ = _env.step(action)
         state_index = float(state[0])
         _data.append([state_index, action, float(reward)])
         state = next_state
@@ -450,10 +446,7 @@ if __name__ == "__main__":
 
     agent = DQNAgent(
         env,
-        args.memory_size,
-        args.batch_size,
-        args.seed,
-        args.gamma
+        args
     )
 
     print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")
@@ -462,3 +455,55 @@ if __name__ == "__main__":
     agent.test(100)
 
     if args.logging: wandb.finish()
+
+
+
+####################################################################################################
+
+def wandb_sweep():
+    with wandb.init() as run:
+        config = wandb.config
+
+        # args = tyro.cli(Args)
+
+        # args.seed = config.seed
+        # args.batch_size = config.batch_size
+        # args.memory_size = config.memory_size
+        # args.optimal_std = config.optimal_std
+        # args.max_suboptimal_mean = config.max_suboptimal_mean
+        # args.logging = True
+
+        args = Args(
+            seed=config.seed,
+            batch_size=config.batch_size,
+            memory_size=config.memory_size,
+            optimal_std=config.optimal_std,
+            max_suboptimal_mean=config.max_suboptimal_mean,
+            logging=True
+        )
+
+        run.name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
+
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+
+        env = gym.make(
+            args.env_id,
+            arms=args.arms,
+            states=args.states,
+            optimal_arms=args.optimal_arms,
+            dynamic_rate=args.dynamic_rate,
+            pace=args.pace,
+            seed=args.seed,
+            optimal_mean=args.optimal_mean,
+            optimal_std=args.optimal_std,
+            min_suboptimal_mean=args.min_suboptimal_mean,
+            max_suboptimal_mean=args.max_suboptimal_mean,
+            suboptimal_std=args.suboptimal_std)
+
+        agent = DQNAgent(
+            env,
+            args
+        )
+        agent.train(args.num_episodes)
+        agent.test(100)
