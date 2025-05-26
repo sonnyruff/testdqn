@@ -192,7 +192,6 @@ class DQNAgent:
         """Train the agent."""
         self.is_test = False
         
-        update_cnt = 0
         losses = []
         rewards = []
         scores = []
@@ -249,8 +248,6 @@ class DQNAgent:
                 #         "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
                 #         "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
                 #     })
-                
-                update_cnt += 1
                 
         print(f"Mean rewards: {np.mean(rewards)}")
         if self.args.logging: wandb.run.summary["mean_rewards"] = np.mean(rewards)
