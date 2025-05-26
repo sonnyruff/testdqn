@@ -1,3 +1,4 @@
+# https://github.com/foreverska/buffalo-gym/blob/develop/buffalo_gym/envs/multibuffalo_gym.py
 from typing import Any, TypeVar, SupportsFloat
 import random
 import matplotlib.pyplot as plt
