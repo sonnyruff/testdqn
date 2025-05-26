@@ -56,13 +56,13 @@ class Args:
     batch_size: int = 50
     """the batch size of sample from the reply memory"""
 
-    hidden_layer_size: int = 4
+    hidden_layer_size: int = 10
 
     arms: int = 10
     states: int = 2
     optimal_arms: int | list[int] = 1
     dynamic_rate: int | None = None
-    pace: int = 1
+    pace: int = 5
     optimal_mean: float = 10
     optimal_std: float = 1
     min_suboptimal_mean: float = 0
@@ -158,7 +158,7 @@ class DQNAgent:
         )
 
         # networks: dqn
-        self.dqn = Network(obs_dim, 2**self.args.hidden_layer_size, action_dim).to(self.device)
+        self.dqn = Network(obs_dim, self.args.hidden_layer_size, action_dim).to(self.device)
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
@@ -253,10 +253,14 @@ class DQNAgent:
                 #         "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
                 #     })
                 
-        print(f"Mean rewards: {np.mean(rewards)}")
-        if self.args.logging: wandb.run.summary["mean_rewards"] = np.mean(rewards)
+        print(f"Mean rewards: {np.mean(rewards[-200:])}")
+        if self.args.logging:
+            wandb.run.summary["mean_rewards"] = np.mean(rewards[-200:])
+
+        if self.args.plotting:
+            self._plot(scores, losses, regrets, arm_weights, np.array(data))
+
         self.env.close()
-        if self.args.plotting: self._plot(scores, losses, regrets, arm_weights, np.array(data))
         
     def test(self, episode_length) -> None:
         """Test the agent."""
@@ -309,21 +313,21 @@ class DQNAgent:
         """Plot the training progresses."""
         plt.figure(figsize=(17, 5))
         plt.subplot(131)
-        plt.title('score: %s' % (np.mean(scores[-10:])))
+        plt.title('score')
         plt.plot(scores)
-        plt.xlabel('Episode')
+        plt.xlabel('Training Step / 50')
         plt.ylabel('Score')
 
         plt.subplot(132)
         plt.title('loss')
         plt.plot(losses)
-        plt.xlabel('Training Steps')
+        plt.xlabel('Training Step')
         plt.ylabel('Loss')
 
         plt.subplot(133)
         plt.title('regret')
         plt.plot(regrets)
-        plt.xlabel('Training Steps')
+        plt.xlabel('Training Step')
         plt.ylabel('Regret')
 
         # ------------------------------------------------------

@@ -7,9 +7,11 @@ sweep_config = {
     "method": "random",
     "metric": {"name": "mean_rewards", "goal": "maximize"},
     "parameters": {
-        "batch_size": {"values": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]},
-        "memory_size": {"values": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]},
-        "hidden_layer_size": {"min": 4, "max": 9}, # e.g. 2**6 = 64
+        # "batch_size": {"values": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]},
+        # "memory_size": {"values": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]},
+        # "hidden_layer_size": {"min": 4, "max": 9}, # e.g. 2**6 = 64
+        "hidden_layer_size": {"values": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]},
+        "pace": {"values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]},
     }
 }
 

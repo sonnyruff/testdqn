@@ -52,8 +52,8 @@ class ConbanditEnv2(gym.Env):
         self.slopes = self.rng.uniform(-1, 1, (self.arms, self.dims))
 
     def __draw_state(self): 
-        # self.state = self.rng.normal(0, 1, self.dims)
-        self.state = self.rng.uniform(-3.0, 3.0, 1)
+        self.state = self.rng.normal(0, 1, self.dims)
+        # self.state = self.rng.uniform(-3.0, 3.0, 1)
 
     def __init__(self, dims: int = 1, arms: int = 10, states: int = 2, optimal_arms: int | list[int] = 1,
                  dynamic_rate: int | None = None, pace: int = 1, seed: int | None = None, optimal_mean: float = 10,
