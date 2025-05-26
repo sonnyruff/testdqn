@@ -56,7 +56,7 @@ class Args:
     batch_size: int = 50
     """the batch size of sample from the reply memory"""
 
-    hidden_layer_size: int = 6
+    hidden_layer_size: int = 4
 
     arms: int = 10
     states: int = 2
@@ -367,7 +367,8 @@ class DQNAgent:
                 optimal_std=self.args.optimal_std,
                 min_suboptimal_mean=self.args.min_suboptimal_mean,
                 max_suboptimal_mean=self.args.max_suboptimal_mean,
-                suboptimal_std=self.args.suboptimal_std), 
+                suboptimal_std=self.args.suboptimal_std,
+                noisy = False), 
             1000)
 
         group_ids = np.unique(sample_data[:, 1])
@@ -440,7 +441,8 @@ if __name__ == "__main__":
         optimal_std=args.optimal_std,
         min_suboptimal_mean=args.min_suboptimal_mean,
         max_suboptimal_mean=args.max_suboptimal_mean,
-        suboptimal_std=args.suboptimal_std)
+        suboptimal_std=args.suboptimal_std,
+        noisy = True)
 
     agent = DQNAgent(env, args)
 

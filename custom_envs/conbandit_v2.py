@@ -54,7 +54,7 @@ class ConbanditEnv2(gym.Env):
     def __init__(self, dims: int = 1, arms: int = 10, states: int = 2, optimal_arms: int | list[int] = 1,
                  dynamic_rate: int | None = None, pace: int = 5, seed: int | None = None, optimal_mean: float = 10,
                  optimal_std: float = 1, min_suboptimal_mean: float = 0, max_suboptimal_mean: float = 5,
-                 suboptimal_std: float = 1):
+                 suboptimal_std: float = 1, noisy: bool = False):
         """
         Multi-armed bandit environment with k arms and n states
         :param arms: number of arms
@@ -75,6 +75,7 @@ class ConbanditEnv2(gym.Env):
         self.pace = pace
         self.initial_seed = seed
         self.seed = seed
+        self.noisy = noisy
 
         # TODO reimplement
         # self.optimal_mean = optimal_mean
@@ -124,8 +125,9 @@ class ConbanditEnv2(gym.Env):
         :param action: arm to pull
         :return: observation, reward, done, term, info
         """
-        # reward = self.rng.normal(self.offsets[0][self.state][action], self.stds[self.state][action], 1)[0]
         reward = self.reward(self.state, action)
+        if self.noisy:
+            reward = self.rng.normal(reward, 0.1, 1)[0]
 
         self.ssr += 1
         if self.pace is None or self.ssr % self.pace == 0:
@@ -139,4 +141,3 @@ class ConbanditEnv2(gym.Env):
             self.__draw_arms()
 
         return np.array(self.state, dtype=np.float32), reward, False, False, {}
-
