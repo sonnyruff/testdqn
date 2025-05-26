@@ -47,7 +47,7 @@ class Args:
     logging: bool = True
     """whether to log to wandb"""
 
-    env_id: str = "ContextualBandit-v1"
+    env_id: str = "ContextualBandit-v2"
     """the id of the environment"""
     num_episodes: int = 2000
     """the number of episodes to run"""
@@ -198,7 +198,6 @@ class DQNAgent:
         scores = []
         arm_weights = []
         data = []
-
         state, _ = self.env.reset(seed=self.args.seed)
 
         # Double loop isn't necessary
