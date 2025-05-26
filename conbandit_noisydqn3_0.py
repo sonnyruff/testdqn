@@ -62,7 +62,7 @@ class Args:
     states: int = 2
     optimal_arms: int | list[int] = 1
     dynamic_rate: int | None = None
-    pace: int = 5
+    pace: int = 1
     optimal_mean: float = 10
     optimal_std: float = 1
     min_suboptimal_mean: float = 0
@@ -181,20 +181,21 @@ class DQNAgent:
 
     def step(self, state: np.ndarray, action: np.ndarray) -> float:
         """Take an action and return the response of the env."""
-        next_state, reward, _, _, _ = self.env.step(action)
+        next_state, reward, _, _, info = self.env.step(action)
         
         if not self.is_test:
             self.memory.store(state, action, reward)
     
-        return next_state, reward
+        return next_state, reward, info
         
     def train(self, num_episodes: int):
         """Train the agent."""
         self.is_test = False
         
-        losses = []
         rewards = []
         scores = []
+        losses = []
+        regrets = []
         arm_weights = []
         data = []
         state, _ = self.env.reset(seed=self.args.seed)
@@ -202,15 +203,18 @@ class DQNAgent:
         # Double loop isn't necessary
         for step_id in tqdm(range(1, num_episodes + 1)):
             score = 0
-            
+
             self.dqn.resample_noise() # line 5
 
             action = self.select_action(state) # line 6
-            next_state, reward = self.step(state, action) # line 7
+            next_state, reward, info = self.step(state, action) # line 7
 
             data.append([step_id, float(state[0]), action, float(reward)]) # line 8
 
+            # regrets.append(self.env.unwrapped.reward(state, action) - reward) # !!! THIS DOESN'T WORK
+            regrets.append(info['regret'])
             rewards.append(reward)
+
             state = next_state
 
 
@@ -252,7 +256,7 @@ class DQNAgent:
         print(f"Mean rewards: {np.mean(rewards)}")
         if self.args.logging: wandb.run.summary["mean_rewards"] = np.mean(rewards)
         self.env.close()
-        if self.args.plotting: self._plot(scores, losses, arm_weights, np.array(data))
+        if self.args.plotting: self._plot(scores, losses, regrets, arm_weights, np.array(data))
         
     def test(self, episode_length) -> None:
         """Test the agent."""
@@ -266,7 +270,7 @@ class DQNAgent:
         
         for _ in range(episode_length):
             action = self.select_action(state)
-            next_state, reward = self.step(state, action)
+            next_state, reward, _ = self.step(state, action)
 
             state = next_state
             score += reward
@@ -298,22 +302,29 @@ class DQNAgent:
         self,
         scores: List[float], 
         losses: List[float],
+        regrets: List[float],
         arm_weights: List[np.ndarray],
         data: np.ndarray
     ):
         """Plot the training progresses."""
-        plt.figure(figsize=(15, 5))
-        plt.subplot(121)
+        plt.figure(figsize=(17, 5))
+        plt.subplot(131)
         plt.title('score: %s' % (np.mean(scores[-10:])))
         plt.plot(scores)
         plt.xlabel('Episode')
         plt.ylabel('Score')
 
-        plt.subplot(122)
+        plt.subplot(132)
         plt.title('loss')
         plt.plot(losses)
         plt.xlabel('Training Steps')
         plt.ylabel('Loss')
+
+        plt.subplot(133)
+        plt.title('regret')
+        plt.plot(regrets)
+        plt.xlabel('Training Steps')
+        plt.ylabel('Regret')
 
         # ------------------------------------------------------
 
@@ -439,7 +450,7 @@ if __name__ == "__main__":
         min_suboptimal_mean=args.min_suboptimal_mean,
         max_suboptimal_mean=args.max_suboptimal_mean,
         suboptimal_std=args.suboptimal_std,
-        noisy = True)
+        noisy = False)
 
     agent = DQNAgent(env, args)
 
