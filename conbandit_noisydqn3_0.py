@@ -56,6 +56,12 @@ class Args:
     batch_size: int = 50
     """the batch size of sample from the reply memory"""
 
+    noisy_layer_distr_type: str = "normal" # or uniform
+    """the distribution of the noisy layer"""
+    noisy_layer_init_std: float = 0.5
+    """the initial standard deviation of the noisy layer"""
+    noisy_output: bool = True
+
     hidden_layer_size: int = 10
 
     arms: int = 10
@@ -72,14 +78,20 @@ class Args:
 ####################################################################################################
 
 class Network(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, distr_type: str, init_std: float, noisy_output: bool):
         super().__init__()
+
+        if noisy_output:
+            last_layer = NoisyLinear(hidden_dim, out_dim, distr_type, init_std)
+        else:
+            last_layer = nn.Linear(hidden_dim, out_dim)
+            
         self.net = nn.Sequential(
             nn.Linear(in_dim, hidden_dim),
             nn.ReLU(),
-            NoisyLinear(hidden_dim, hidden_dim),
+            NoisyLinear(hidden_dim, hidden_dim, distr_type, init_std),
             nn.ReLU(),
-            NoisyLinear(hidden_dim, out_dim)
+            last_layer
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -158,7 +170,7 @@ class DQNAgent:
         )
 
         # networks: dqn
-        self.dqn = Network(obs_dim, self.args.hidden_layer_size, action_dim).to(self.device)
+        self.dqn = Network(obs_dim, self.args.hidden_layer_size, action_dim, self.args.noisy_layer_distr_type, self.args.noisy_layer_init_std, self.args.noisy_output).to(self.device)
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
@@ -217,6 +229,7 @@ class DQNAgent:
 
             state = next_state
 
+            if self.args.logging: wandb.log({"regret": info['regret']})
 
             if step_id % 10 == 0:
                 ## Scatterplot background ======
@@ -253,12 +266,13 @@ class DQNAgent:
                 #         "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
                 #     })
                 
-        print(f"Mean rewards: {np.mean(rewards[-200:])}")
+        # print(f"Mean rewards: {np.mean(rewards[-100:])}")
         if self.args.logging:
-            wandb.run.summary["mean_rewards"] = np.mean(rewards[-200:])
+            # wandb.run.summary["mean_rewards"] = np.mean(rewards[-100:])
+            wandb.run.summary["mean_regret"] = np.mean(regrets[-100:])
 
         if self.args.plotting:
-            self._plot(scores, losses, regrets, arm_weights, np.array(data))
+            self._plot(rewards, scores, losses, regrets, arm_weights, np.array(data))
 
         self.env.close()
         
@@ -304,6 +318,7 @@ class DQNAgent:
 
     def _plot(
         self,
+        rewards: List[float],
         scores: List[float], 
         losses: List[float],
         regrets: List[float],
@@ -312,20 +327,23 @@ class DQNAgent:
     ):
         """Plot the training progresses."""
         plt.figure(figsize=(17, 5))
+
         plt.subplot(131)
-        plt.title('score')
-        plt.plot(scores)
-        plt.xlabel('Training Step / 50')
-        plt.ylabel('Score')
+        plt.title('Rewards and Scores')
+        plt.plot(rewards, label='Reward', alpha=0.5)
+        plt.plot(np.arange(0, len(rewards), 50), scores, label='Score (mean of 50)', linewidth=2)
+        plt.xlabel('Training Step')
+        plt.ylabel('Value')
+        plt.legend()
 
         plt.subplot(132)
-        plt.title('loss')
+        plt.title('Loss')
         plt.plot(losses)
         plt.xlabel('Training Step')
         plt.ylabel('Loss')
 
         plt.subplot(133)
-        plt.title('regret')
+        plt.title('Regret')
         plt.plot(regrets)
         plt.xlabel('Training Step')
         plt.ylabel('Regret')
@@ -461,7 +479,7 @@ if __name__ == "__main__":
     print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")
 
     agent.train(args.num_episodes)
-    agent.test(100)
+    # agent.test(100)
 
     if args.logging: wandb.finish()
 
@@ -472,9 +490,13 @@ def wandb_sweep():
         config = wandb.config
 
         args = Args(
-            batch_size=config.batch_size,
-            memory_size=config.memory_size,
+            # batch_size=config.batch_size,
+            # memory_size=config.memory_size,
             hidden_layer_size=config.hidden_layer_size,
+            pace=config.pace,
+            noisy_layer_distr_type=config.noisy_layer_distr_type,
+            noisy_layer_init_std=config.noisy_layer_init_std,
+            noisy_output=config.noisy_output
         )
 
         run.name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
@@ -497,5 +519,6 @@ def wandb_sweep():
             suboptimal_std=args.suboptimal_std)
 
         agent = DQNAgent(env, args)
+        print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")
         agent.train(args.num_episodes)
         # agent.test(100)
