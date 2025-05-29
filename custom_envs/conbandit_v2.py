@@ -97,6 +97,7 @@ class ConbanditEnv2(gym.Env):
         self.rng = np.random.default_rng(self.seed)
 
         self.action_space = gym.spaces.Discrete(self.arms)
+        # todo shouldn't low and high be -4 to 4?
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.dims,), dtype=np.float32)
 
         self.pulls = 0

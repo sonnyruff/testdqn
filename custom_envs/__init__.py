@@ -3,6 +3,7 @@ from custom_envs.bandit_v0 import BanditEnv0
 from custom_envs.conbandit_v0 import ConbanditEnv0
 from custom_envs.conbandit_v1 import ConbanditEnv1
 from custom_envs.conbandit_v2 import ConbanditEnv2
+from custom_envs.mnistbandit_v0 import MNISTBandit
 
 gym.register(
     id='Bandit-v0',
@@ -25,5 +26,17 @@ gym.register(
 gym.register(
     id='ContextualBandit-v2',
     entry_point=__name__ + ":ConbanditEnv2",
+    max_episode_steps=1000
+)
+
+gym.register(
+    id='MNISTBandit-v0',
+    entry_point=__name__ + ":MNISTBandit",
+    max_episode_steps=1000
+)
+
+gym.register(
+    id='NNBandit-v0',
+    entry_point=__name__ + ":NNBandit",
     max_episode_steps=1000
 )

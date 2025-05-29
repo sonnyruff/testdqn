@@ -47,7 +47,7 @@ class Args:
     logging: bool = True
     """whether to log to wandb"""
 
-    env_id: str = "ContextualBandit-v2"
+    env_id: str = "MNISTBandit-v0"
     """the id of the environment"""
     num_episodes: int = 2000
     """the number of episodes to run"""
@@ -231,14 +231,14 @@ class DQNAgent:
 
             if self.args.logging: wandb.log({"regret": info['regret']})
 
-            if step_id % 10 == 0:
-                ## Scatterplot background ======
-                x = np.linspace(-3, 3, 100)
-                # put each x value forward through the network
-                q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
-                best_actions = np.argmax(q_values, axis=1)
-                arm_weights.append((step_id, best_actions))
-                ## =============================
+            # if step_id % 10 == 0 and self.args.plotting:
+            #     ## Scatterplot background ======
+            #     x = np.linspace(-3, 3, 100)
+            #     # put each x value forward through the network
+            #     q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
+            #     best_actions = np.argmax(q_values, axis=1)
+            #     arm_weights.append((step_id, best_actions))
+            #     ## =============================
 
             if step_id % 50 == 0:
                 # score += sum(rewards[-50:])
@@ -350,77 +350,66 @@ class DQNAgent:
 
         # ------------------------------------------------------
 
-        fig, ax = plt.subplots(2, 1, figsize=(15, 10))
+        # fig, ax = plt.subplots(2, 1, figsize=(15, 10))
 
-        # --- Top subplot: heatmap + scatter overlay ---
-        step_ids = [step for step, _ in arm_weights]
-        x_vals = np.linspace(-3, 3, 100)
-        action_matrix = np.stack([actions for _, actions in arm_weights], axis=0)
+        # # --- Top subplot: heatmap + scatter overlay ---
+        # step_ids = [step for step, _ in arm_weights]
+        # x_vals = np.linspace(-3, 3, 100)
+        # action_matrix = np.stack([actions for _, actions in arm_weights], axis=0)
 
-        # Heatmap
-        im = ax[0].imshow(
-            action_matrix,
-            aspect='auto',
-            extent=[x_vals[0], x_vals[-1], step_ids[0], step_ids[-1]],
-            origin='lower',
-            cmap='viridis'
-        )
+        # # Heatmap
+        # im = ax[0].imshow(
+        #     action_matrix,
+        #     aspect='auto',
+        #     extent=[x_vals[0], x_vals[-1], step_ids[0], step_ids[-1]],
+        #     origin='lower',
+        #     cmap='viridis'
+        # )
 
-        # Overlay scatter1
-        scatter1 = ax[0].scatter(
-            data[:, 1], data[:, 0],
-            c=data[:, 2],
-            cmap="viridis",
-            alpha=0.6,
-            s=15,
-            edgecolors='black',
-            linewidths=0.2
-        )
-        fig.colorbar(scatter1, ax=ax[0], label="Action")
-        ax[0].set_xlabel("State")
-        ax[0].set_ylabel("Training Step")
-        ax[0].set_title("Best Action Heatmap and Scatter Overlay")
-        ax[0].grid(True)
+        # # Overlay scatter1
+        # scatter1 = ax[0].scatter(
+        #     data[:, 1], data[:, 0],
+        #     c=data[:, 2],
+        #     cmap="viridis",
+        #     alpha=0.6,
+        #     s=15,
+        #     edgecolors='black',
+        #     linewidths=0.2
+        # )
+        # fig.colorbar(scatter1, ax=ax[0], label="Action")
+        # ax[0].set_xlabel("State")
+        # ax[0].set_ylabel("Training Step")
+        # ax[0].set_title("Best Action Heatmap and Scatter Overlay")
+        # ax[0].grid(True)
 
 
-        # --- Bottom subplot: second scatter ---
-        sample_data = sample_env(
-            gym.make(
-                self.args.env_id,
-                arms=self.args.arms,
-                states=self.args.states,
-                optimal_arms=self.args.optimal_arms,
-                dynamic_rate=self.args.dynamic_rate,
-                pace=self.args.pace,
-                seed=self.args.seed,
-                optimal_mean=self.args.optimal_mean,
-                optimal_std=self.args.optimal_std,
-                min_suboptimal_mean=self.args.min_suboptimal_mean,
-                max_suboptimal_mean=self.args.max_suboptimal_mean,
-                suboptimal_std=self.args.suboptimal_std,
-                noisy = False), 
-            1000)
+        # # --- Bottom subplot: second scatter ---
+        # sample_data = sample_env(
+        #     gym.make(
+        #         self.args.env_id,
+        #         seed=self.args.seed), 
+        #     1000)
 
-        group_ids = np.unique(sample_data[:, 1])
+        # group_ids = np.unique(sample_data[:, 1])
 
-        for gid in group_ids:
-            group_mask = sample_data[:, 1] == gid
-            group_data = sample_data[group_mask]
-            sorted_indices = np.argsort(group_data[:, 0])
-            ax[1].plot(group_data[sorted_indices, 0], group_data[sorted_indices, 2], alpha=0.4, linewidth=1.5,)
+        # for gid in group_ids:
+        #     group_mask = sample_data[:, 1] == gid
+        #     group_data = sample_data[group_mask]
+        #     sorted_indices = np.argsort(group_data[:, 0])
+        #     ax[1].plot(group_data[sorted_indices, 0], group_data[sorted_indices, 2], alpha=0.4, linewidth=1.5,)
 
-        timesteps = data[:, 0]
-        # normalized = (timesteps - timesteps.min()) / (timesteps.max() - timesteps.min() + 1e-8)
-        # size = 80 * normalized
-        size = 80 * timesteps / (timesteps.max() - timesteps.min())
+        # timesteps = data[:, 0]
+        # # normalized = (timesteps - timesteps.min()) / (timesteps.max() - timesteps.min() + 1e-8)
+        # # size = 80 * normalized
+        # size = 80 * timesteps / (timesteps.max() - timesteps.min())
 
-        scatter2 = ax[1].scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6, s=size)
-        fig.colorbar(scatter2, ax=ax[1], label="Action")
-        ax[1].set_xlabel("State")
-        ax[1].set_ylabel("Reward")
-        ax[1].grid(True)
+        # scatter2 = ax[1].scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6, s=size)
+        # fig.colorbar(scatter2, ax=ax[1], label="Action")
+        # ax[1].set_xlabel("State")
+        # ax[1].set_ylabel("Reward")
+        # ax[1].grid(True)
 
-        plt.tight_layout()
+        # plt.tight_layout()
         if self.args.show_plot: plt.show()
 
         if self.args.logging:
@@ -460,19 +449,8 @@ if __name__ == "__main__":
         torch.backends.cudnn.deterministic = True
 
     env = gym.make(
-        args.env_id,
-        arms=args.arms,
-        states=args.states,
-        optimal_arms=args.optimal_arms,
-        dynamic_rate=args.dynamic_rate,
-        pace=args.pace,
-        seed=args.seed,
-        optimal_mean=args.optimal_mean,
-        optimal_std=args.optimal_std,
-        min_suboptimal_mean=args.min_suboptimal_mean,
-        max_suboptimal_mean=args.max_suboptimal_mean,
-        suboptimal_std=args.suboptimal_std,
-        noisy = False)
+                args.env_id,
+                seed=args.seed)
 
     agent = DQNAgent(env, args)
 
@@ -506,18 +484,8 @@ def wandb_sweep():
         torch.manual_seed(args.seed)
 
         env = gym.make(
-            args.env_id,
-            arms=args.arms,
-            states=args.states,
-            optimal_arms=args.optimal_arms,
-            dynamic_rate=args.dynamic_rate,
-            pace=args.pace,
-            seed=args.seed,
-            optimal_mean=args.optimal_mean,
-            optimal_std=args.optimal_std,
-            min_suboptimal_mean=args.min_suboptimal_mean,
-            max_suboptimal_mean=args.max_suboptimal_mean,
-            suboptimal_std=args.suboptimal_std)
+                args.env_id,
+                seed=args.seed)
 
         agent = DQNAgent(env, args)
         print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")

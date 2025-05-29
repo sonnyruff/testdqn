@@ -91,7 +91,7 @@ class NoisyLinear(nn.Module):
         if distr_type == 'normal':
             x = torch.randn(size)
         elif distr_type == 'uniform':
-            x = torch.rand(size)
+            x = torch.rand(size)*2-1
 
         return x.sign().mul(x.abs().sqrt())
 
