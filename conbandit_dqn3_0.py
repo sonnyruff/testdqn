@@ -1,8 +1,7 @@
 """
-conbandit_dqn2_0.py
-
 DQN implementation for ContextualBandit-v1 - Continuous input state
 Single loop version
+Single network
 
 Author: Sonny Ruff
 Date: 12-05-2025
@@ -50,10 +49,6 @@ class Args:
     """the number of episodes to run"""
     memory_size: int = 1000
     """the replay memory buffer size"""
-    gamma: float = 0.99
-    """the discount factor gamma"""
-    target_update: int = 50
-    """the timesteps it takes to update the target network"""
     batch_size: int = 50
     """the batch size of sample from the reply memory"""
 
@@ -125,10 +120,7 @@ class DQNAgent:
         env (gym.Env): openAI Gym environment
         memory (ReplayBuffer): replay memory to store transitions
         batch_size (int): batch size for sampling
-        target_update (int): period for target model's hard update
-        gamma (float): discount factor
         dqn (Network): model to train and select actions
-        dqn_target (Network): target model to update
         optimizer (torch.optim): optimizer for training dqn
         transition (list): transition information including
                            state, action, reward, next_state, done
@@ -139,9 +131,7 @@ class DQNAgent:
         env: gym.Env,
         memory_size: int,
         batch_size: int,
-        target_update: int,
         seed: int,
-        gamma: float = 0.99,
     ):
         """Initialization.
         
@@ -149,34 +139,22 @@ class DQNAgent:
             env (gym.Env): openAI Gym environment
             memory_size (int): length of memory
             batch_size (int): batch size for sampling
-            target_update (int): period for target model's hard update
-            gamma (float): discount factor
         """
-        # NoisyNet: All attributes related to epsilon are removed
         obs_dim = env.observation_space.shape[0]
-        # obs_dim = env.unwrapped.states # WRONG
         action_dim = env.action_space.n
         
         self.env = env
         self.memory = ReplayBuffer(obs_dim, memory_size, batch_size)
         self.batch_size = batch_size
-        self.target_update = target_update
         self.seed = seed
-        self.gamma = gamma
         
         # device: cpu / gpu
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        print(self.device)
 
-        # networks: dqn, dqn_target
+        # network: dqn
         self.dqn = Network(obs_dim, action_dim).to(self.device)
-        # self.dqn_target = Network(obs_dim, action_dim).to(self.device)
-        # self.dqn_target.load_state_dict(self.dqn.state_dict())
-        # self.dqn_target.eval()
-
-        print(self.dqn)
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
@@ -189,14 +167,11 @@ class DQNAgent:
 
     def select_action(self, state: np.ndarray, epsilon: float) -> np.ndarray:
         """Select an action from the input state."""
-        # selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
-        # selected_action = selected_action.detach().cpu().numpy()
-        if random.random() < epsilon:
+        if np.random.rand() < epsilon:
             selected_action = self.env.action_space.sample()
         else:
             selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
             selected_action = selected_action.detach().cpu().numpy()
-        
         
         if not self.is_test:
             self.transition = [state, selected_action]
@@ -206,10 +181,8 @@ class DQNAgent:
     def step(self, state: np.ndarray, action: np.ndarray) -> Tuple[np.ndarray, float]:
         """Take an action and return the response of the env."""
         next_state, reward, _, _, _ = self.env.step(action)
-        # done = terminated or truncated
         
         if not self.is_test:
-            # self.transition += [reward, next_state, done]
             self.memory.store(state, action, reward)
     
         return next_state, reward
@@ -221,6 +194,7 @@ class DQNAgent:
         
         update_cnt = 0
         losses = []
+        rewards = []
         scores = []
         arm_weights = []
         data = []
@@ -237,46 +211,42 @@ class DQNAgent:
 
             data.append([step_id, float(state[0]), action, float(reward)])
 
+            rewards.append(reward)
             state = next_state
-            score += reward
             epsilons.append(epsilon)
 
             if step_id % 10 == 0:
+                ## Scatterplot background ======
                 x = np.linspace(-3, 3, 100)
                 # put each x value forward through the network
                 q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
                 best_actions = np.argmax(q_values, axis=1)
                 arm_weights.append((step_id, best_actions))
+                ## =============================
 
+            if step_id % 50 == 0:
+                # score += sum(rewards[-50:])
+                score += np.mean(rewards[-50:])
+                scores.append(score)
+                if args.logging: wandb.log({"score": score})
 
             # if training is ready
             if len(self.memory) >= self.batch_size:
                 samples = self.memory.sample_batch()
 
                 loss = self._compute_dqn_loss(samples)
-
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-                loss = loss.item()
                 
                 losses.append(loss)
 
                 # Decay epsilon
-                epsilon = max(epsilon - 1/num_episodes, 0)
+                epsilon = max(epsilon - 2/num_episodes, 0)
+                # epsilon = max(epsilon - 1/500, 0)
 
                 if args.logging: wandb.log({"loss": loss})
                 
                 update_cnt += 1
                 
-                # if hard update is needed
-                # if update_cnt % self.target_update == 0:
-                #     self._target_hard_update()
-            
-            scores.append(score)
-            if args.logging: wandb.log({"score": score})
-                
+        print(f"Mean rewards: {np.mean(rewards)}")
         self.env.close()
         self._plot(scores, losses, arm_weights, np.array(data), epsilons)
         
@@ -286,8 +256,7 @@ class DQNAgent:
         epsilon = 1
         
         # for recording a video
-        naive_env = self.env
-        # self.env = gym.wrappers.RecordVideo(self.env, video_folder=video_folder)
+        naive_env = self.env # remove?
         
         state, _ = self.env.reset()
         score = 0
@@ -306,35 +275,23 @@ class DQNAgent:
         self.env.close()
         
         # reset
-        self.env = naive_env
+        self.env = naive_env # remove?
 
     def _compute_dqn_loss(self, samples: Dict[str, np.ndarray]) -> torch.Tensor:
         """Return dqn loss."""
-        device = self.device  # for shortening the following lines
+        device = self.device
         state = torch.FloatTensor(samples["obs"]).to(device)
-        # next_state = torch.FloatTensor(samples["next_obs"]).to(device)
         action = torch.LongTensor(samples["acts"].reshape(-1, 1)).to(device)
         reward = torch.FloatTensor(samples["rews"].reshape(-1, 1)).to(device)
-        # done = torch.FloatTensor(samples["done"].reshape(-1, 1)).to(device)
         
-        # G_t   = r + gamma * v(s_{t+1})  if state != Terminal
-        #       = r                       otherwise
         curr_q_value = self.dqn(state).gather(1, action)
-        # next_q_value = self.dqn_target(next_state).max(
-        #     dim=1, keepdim=True
-        # )[0].detach()
-        # mask = 1 - done
-        # target = (reward + self.gamma * next_q_value * mask).to(self.device)
-
-        # calculate dqn loss
-        # loss = F.smooth_l1_loss(curr_q_value, target)
         loss = F.mse_loss(curr_q_value, reward)
 
-        return loss
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
 
-    # def _target_hard_update(self):
-    #     """Hard update: target <- local."""
-    #     self.dqn_target.load_state_dict(self.dqn.state_dict())
+        return loss.item()
 
     def _plot(
         self,
@@ -357,7 +314,6 @@ class DQNAgent:
         plt.plot(losses)
         plt.xlabel('Training Steps')
         plt.ylabel('Loss')
-
 
         plt.figure(figsize=(10, 10))
         plt.plot(epsilons)
@@ -386,7 +342,7 @@ class DQNAgent:
             c=data[:, 2],
             cmap="viridis",
             alpha=0.6,
-            s=20,
+            s=15,
             edgecolors='black',
             linewidths=0.2
         )
@@ -411,9 +367,8 @@ class DQNAgent:
                 optimal_std=args.optimal_std,
                 min_suboptimal_mean=args.min_suboptimal_mean,
                 max_suboptimal_mean=args.max_suboptimal_mean,
-                suboptimal_std=args.suboptimal_std
-            ) 
-        )
+                suboptimal_std=args.suboptimal_std), 
+            1000)
 
         group_ids = np.unique(sample_data[:, 1])
 
@@ -433,7 +388,6 @@ class DQNAgent:
         ax[1].set_xlabel("State")
         ax[1].set_ylabel("Reward")
         ax[1].grid(True)
-        ax[1].legend(loc="upper right", fontsize="small", ncol=2)
 
         plt.tight_layout()
         plt.show()
@@ -441,7 +395,8 @@ class DQNAgent:
         if args.logging:
             wandb.log({"Reward Scatter": wandb.Image(fig)})
 
-def sample_env(env, num_samples=10000): # somehow just sampling the reward functions didn't work
+def sample_env(env, num_samples=1000):
+    """somehow just sampling the reward functions didn't work"""
     state, _ = env.reset(seed=args.seed)
     _data = []
     for _ in range(num_samples):
@@ -457,7 +412,6 @@ def sample_env(env, num_samples=10000): # somehow just sampling the reward funct
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    print(args.seed)
     run_name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
     if args.logging:wandb.init(
         project=args.wandb_project_name,
@@ -492,10 +446,11 @@ if __name__ == "__main__":
         env,
         args.memory_size,
         args.batch_size,
-        args.target_update,
-        args.seed,
-        args.gamma
+        args.seed
     )
+
+    print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")
+
     agent.train(args.num_episodes)
     agent.test(100)
 

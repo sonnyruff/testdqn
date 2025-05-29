@@ -89,8 +89,8 @@ class Network(nn.Module):
     
     def reset_noise(self):
         """Reset all noisy layers."""
-        self.noisy_layer1.reset_noise()
-        self.noisy_layer2.reset_noise()
+        self.noisy_layer1.resample_noise()
+        self.noisy_layer2.resample_noise()
 
 class ReplayBuffer:
     """A simple numpy replay buffer."""
@@ -218,15 +218,15 @@ class DQNAgent:
         """Update the model by gradient descent."""
         samples = self.memory.sample_batch()
 
+        # NoisyNet: reset noise
+        self.dqn.reset_noise()
+        self.dqn_target.reset_noise() # remove
+        
         loss = self._compute_dqn_loss(samples)
 
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        
-        # NoisyNet: reset noise
-        self.dqn.reset_noise()
-        self.dqn_target.reset_noise()
 
         return loss.item()
         
@@ -246,6 +246,8 @@ class DQNAgent:
         for step_id in tqdm(range(1, num_episodes + 1)):
             score = 0
             
+            self.dqn.reset_noise()
+
             action = self.select_action(state)
             next_state, reward = self.step(state, action)
 

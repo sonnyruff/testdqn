@@ -1,0 +1,125 @@
+from typing import Any, TypeVar, SupportsFloat
+import random
+import matplotlib.pyplot as plt
+
+import gymnasium as gym
+import numpy as np
+import torch
+import torch.nn as nn
+
+ObsType = TypeVar("ObsType")
+ActType = TypeVar("ActType")
+
+
+class NNBanditEnv(gym.Env):
+    """
+    Multi-armed bandit environment with a continuous state
+    """
+    metadata = {'render_modes': []}
+
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, optimal_arms: int | list[int] = 1,
+                 dynamic_rate: int | None = None, pace: int = 1, seed: int | None = None):
+        
+        self.in_dim = in_dim
+        self.hidden_dim = hidden_dim
+        self.out_dim = out_dim
+
+        self.dynamic_rate = dynamic_rate
+        self.pace = pace
+        self.initial_seed = seed
+        self.seed = seed
+        self.rng = np.random.default_rng(self.seed)
+        
+        if optimal_arms is list and len(optimal_arms) != self.out_dim:
+            raise ValueError("Optimal arms list must have equal number of arms")
+        self.optimal_arms = optimal_arms
+
+        self._total_regret = 0.
+        self._optimal_return = 1.
+
+        self.action_space = gym.spaces.Discrete(self.in_dim)
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        self.state = None
+
+        self.pulls = 0
+        self.ssr = 0
+
+        # todo Are both the weights and the biases non-zero?
+        self.net = Network(self.in_dim, self.hidden_dim, self.out_dim)
+
+    def reset(self,
+              *,
+              seed: int | None = None,
+              options: dict[str, Any] | None = None) -> tuple[ObsType, dict[str, Any]]:
+        """
+        Resets the environment
+        :param seed: WARN unused, defaults to None
+        :param options: WARN unused, defaults to None
+        :return: observation, info
+        """
+        self.state = np.random.randint(0, self.in_dim)
+        self.seed = seed
+        self.pulls = 0
+        self.ssr = 0
+
+        return np.array(self.state, dtype=np.float32), {}
+
+    def step(self, action: ActType) -> tuple[ObsType, SupportsFloat, bool, bool, dict[str, Any]]:
+        """
+        Steps the environment
+        :param action: arm to pull
+        :return: observation, reward, done, term, info
+        """
+        # If the state is 0 and action is 0.2 -> [0.2, 0.,  0. ..., 0.]
+        # If the state is 1 and action is 0.9 -> [0.,  0.9, 0. ..., 0.]
+        q_values = self.net(action).detach()
+        correct = np.argmax(q_values.numpy()) == self.optimal_arms
+        reward = 1. if correct else -1.
+
+        # if self.noisy:
+        #     reward = self.rng.normal(reward, 0.1, 1)[0]
+        
+        regret = self._optimal_return - reward
+        self._total_regret += regret
+
+        self.ssr += 1
+        if self.pace is None or self.ssr % self.pace == 0:
+            self.state = self.random.randint(0, self.in_dim)
+        
+        # self.pulls += 1
+        # if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
+        #     print(f"Changing arms")
+        #     if self.seed is not None:
+        #         self.seed += 1
+        #     self.__draw_arms()
+
+        return self.state, reward, False, False, {'regret': regret, 'total_regret': self._total_regret}
+    
+
+class Network(nn.Module):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
+        super().__init__()
+        
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, out_dim)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+    
+
+if __name__ == '__main__':
+    # net = Network(2, 2, 2)
+    # torch.manual_seed(666)
+    # print(net(torch.tensor(np.random.uniform(0, 1, 10), dtype=torch.float32)))
+    # print(net(torch.FloatTensor(np.random.uniform(0, 1, 10))))
+    # print(np.argmax(net(torch.FloatTensor(np.random.uniform(0, 1, 10))).detach()))
+    # print(np.argmax(net(torch.FloatTensor(np.random.uniform(0, 1, 10))).detach().numpy()))
+
+    env = NNBanditEnv(2, 2, 2)
+    obs, _ = env.reset()
+    print(env.step(1))

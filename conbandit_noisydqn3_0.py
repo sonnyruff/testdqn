@@ -1,8 +1,7 @@
 """
-conbandit_dqn2_0.py
-
-DQN implementation for ContextualBandit-v1 - Continuous input state
+NoisyNet-DQN implementation for ContextualBandit-v1 - Continuous input state
 Single loop version
+Single network
 
 Author: Sonny Ruff
 Date: 12-05-2025
@@ -16,7 +15,6 @@ import os
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
-import random
 
 import gymnasium as gym
 import matplotlib.pyplot as plt
@@ -30,6 +28,7 @@ import wandb
 import tyro
 
 import custom_envs
+from NoisyLinear import NoisyLinear
 
 ####################################################################################################
 
@@ -41,21 +40,29 @@ class Args:
     """seed of the experiment"""
     wandb_project_name: str = "noisynet-dqn"
     """the wandb's project name"""
+    plotting: bool = False
+    """whether to plot the results"""
+    show_plot: bool = False
+    """whether to show the plot"""
     logging: bool = True
     """whether to log to wandb"""
 
-    env_id: str = "ContextualBandit-v1"
+    env_id: str = "ContextualBandit-v2"
     """the id of the environment"""
-    num_episodes: int = 3000
+    num_episodes: int = 2000
     """the number of episodes to run"""
     memory_size: int = 1000
     """the replay memory buffer size"""
-    gamma: float = 0.99
-    """the discount factor gamma"""
-    target_update: int = 50
-    """the timesteps it takes to update the target network"""
     batch_size: int = 50
     """the batch size of sample from the reply memory"""
+
+    noisy_layer_distr_type: str = "normal" # or uniform
+    """the distribution of the noisy layer"""
+    noisy_layer_init_std: float = 0.5
+    """the initial standard deviation of the noisy layer"""
+    noisy_output: bool = True
+
+    hidden_layer_size: int = 10
 
     arms: int = 10
     states: int = 2
@@ -71,21 +78,29 @@ class Args:
 ####################################################################################################
 
 class Network(nn.Module):
-    def __init__(self, in_dim: int, out_dim: int):
-        """Initialization."""
-        super(Network, self).__init__()
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, distr_type: str, init_std: float, noisy_output: bool):
+        super().__init__()
 
-        self.feature = nn.Linear(in_dim, out_dim)
-        self.layer1 = nn.Linear(out_dim, out_dim)
-        self.layer2 = nn.Linear(out_dim, out_dim)
+        if noisy_output:
+            last_layer = NoisyLinear(hidden_dim, out_dim, distr_type, init_std)
+        else:
+            last_layer = nn.Linear(hidden_dim, out_dim)
+            
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.ReLU(),
+            NoisyLinear(hidden_dim, hidden_dim, distr_type, init_std),
+            nn.ReLU(),
+            last_layer
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward method implementation."""
-        feature = F.relu(self.feature(x))
-        hidden = F.relu(self.layer1(feature))
-        out = self.layer2(hidden)
-        
-        return out
+        return self.net(x)
+
+    def resample_noise(self):
+        for layer in self.net:
+            if isinstance(layer, NoisyLinear):
+                layer.resample_noise()
 
 class ReplayBuffer:
     """A simple numpy replay buffer."""
@@ -125,10 +140,7 @@ class DQNAgent:
         env (gym.Env): openAI Gym environment
         memory (ReplayBuffer): replay memory to store transitions
         batch_size (int): batch size for sampling
-        target_update (int): period for target model's hard update
-        gamma (float): discount factor
         dqn (Network): model to train and select actions
-        dqn_target (Network): target model to update
         optimizer (torch.optim): optimizer for training dqn
         transition (list): transition information including
                            state, action, reward, next_state, done
@@ -137,46 +149,28 @@ class DQNAgent:
     def __init__(
         self, 
         env: gym.Env,
-        memory_size: int,
-        batch_size: int,
-        target_update: int,
-        seed: int,
-        gamma: float = 0.99,
+        args: Args = None
     ):
         """Initialization.
         
         Args:
             env (gym.Env): openAI Gym environment
-            memory_size (int): length of memory
-            batch_size (int): batch size for sampling
-            target_update (int): period for target model's hard update
-            gamma (float): discount factor
+            args (Args): arguments
         """
-        # NoisyNet: All attributes related to epsilon are removed
         obs_dim = env.observation_space.shape[0]
-        # obs_dim = env.unwrapped.states # WRONG
         action_dim = env.action_space.n
         
         self.env = env
-        self.memory = ReplayBuffer(obs_dim, memory_size, batch_size)
-        self.batch_size = batch_size
-        self.target_update = target_update
-        self.seed = seed
-        self.gamma = gamma
+        self.args = args
+        self.memory = ReplayBuffer(obs_dim, self.args.memory_size, self.args.batch_size)
         
         # device: cpu / gpu
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        print(self.device)
 
-        # networks: dqn, dqn_target
-        self.dqn = Network(obs_dim, action_dim).to(self.device)
-        # self.dqn_target = Network(obs_dim, action_dim).to(self.device)
-        # self.dqn_target.load_state_dict(self.dqn.state_dict())
-        # self.dqn_target.eval()
-
-        print(self.dqn)
+        # networks: dqn
+        self.dqn = Network(obs_dim, self.args.hidden_layer_size, action_dim, self.args.noisy_layer_distr_type, self.args.noisy_layer_init_std, self.args.noisy_output).to(self.device)
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
@@ -187,180 +181,172 @@ class DQNAgent:
         # mode: train / test
         self.is_test = False
 
-    def select_action(self, state: np.ndarray, epsilon: float) -> np.ndarray:
+    def select_action(self, state: np.ndarray) -> np.ndarray:
         """Select an action from the input state."""
-        # selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
-        # selected_action = selected_action.detach().cpu().numpy()
-        if random.random() < epsilon:
-            selected_action = self.env.action_space.sample()
-        else:
-            selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
-            selected_action = selected_action.detach().cpu().numpy()
-        
+        selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
+        selected_action = selected_action.detach().cpu().numpy()
         
         if not self.is_test:
             self.transition = [state, selected_action]
         
         return selected_action
 
-    def step(self, state: np.ndarray, action: np.ndarray) -> Tuple[np.ndarray, float]:
+    def step(self, state: np.ndarray, action: np.ndarray) -> float:
         """Take an action and return the response of the env."""
-        next_state, reward, _, _, _ = self.env.step(action)
-        # done = terminated or truncated
+        next_state, reward, _, _, info = self.env.step(action)
         
         if not self.is_test:
-            # self.transition += [reward, next_state, done]
             self.memory.store(state, action, reward)
     
-        return next_state, reward
+        return next_state, reward, info
         
     def train(self, num_episodes: int):
         """Train the agent."""
         self.is_test = False
-        epsilon = 1
         
-        update_cnt = 0
-        losses = []
+        rewards = []
         scores = []
+        losses = []
+        regrets = []
         arm_weights = []
         data = []
-        epsilons = []
-
-        state, _ = self.env.reset(seed=self.seed)
+        state, _ = self.env.reset(seed=self.args.seed)
 
         # Double loop isn't necessary
         for step_id in tqdm(range(1, num_episodes + 1)):
             score = 0
-            
-            action = self.select_action(state, epsilon)
-            next_state, reward = self.step(state, action)
 
-            data.append([step_id, float(state[0]), action, float(reward)])
+            self.dqn.resample_noise() # line 5 - shouldn't this be only once before the training loop?
+
+            action = self.select_action(state) # line 6
+            next_state, reward, info = self.step(state, action) # line 7
+
+            data.append([step_id, float(state[0]), action, float(reward)]) # line 8
+
+            # regrets.append(self.env.unwrapped.reward(state, action) - reward) # !!! THIS DOESN'T WORK
+            regrets.append(info['regret'])
+            rewards.append(reward)
 
             state = next_state
-            score += reward
-            epsilons.append(epsilon)
+
+            if self.args.logging: wandb.log({"regret": info['regret']})
 
             if step_id % 10 == 0:
+                ## Scatterplot background ======
                 x = np.linspace(-3, 3, 100)
                 # put each x value forward through the network
                 q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
                 best_actions = np.argmax(q_values, axis=1)
                 arm_weights.append((step_id, best_actions))
+                ## =============================
 
+            if step_id % 50 == 0:
+                # score += sum(rewards[-50:])
+                score += np.mean(rewards[-50:])
+                scores.append(score)
+                if self.args.logging: wandb.log({"score": score})
 
             # if training is ready
-            if len(self.memory) >= self.batch_size:
-                samples = self.memory.sample_batch()
-
+            if len(self.memory) >= self.args.batch_size:
+                samples = self.memory.sample_batch() # line 12
+                
+                self.dqn.resample_noise() # line 13
+                
                 loss = self._compute_dqn_loss(samples)
-
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-                loss = loss.item()
-                
                 losses.append(loss)
+                if self.args.logging: wandb.log({"loss": loss})
 
-                # Decay epsilon
-                epsilon = max(epsilon - 1/num_episodes, 0)
+                # noise_l1 = self.dqn.noisy_layer1.get_noise()
+                # noise_l2 = self.dqn.noisy_layer2.get_noise()
+                # if self.args.logging:
+                #     wandb.log({
+                #         "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
+                #         "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
+                #         "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
+                #         "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
+                #     })
+                
+        # print(f"Mean rewards: {np.mean(rewards[-100:])}")
+        if self.args.logging:
+            # wandb.run.summary["mean_rewards"] = np.mean(rewards[-100:])
+            wandb.run.summary["mean_regret"] = np.mean(regrets[-100:])
 
-                if args.logging: wandb.log({"loss": loss})
-                
-                update_cnt += 1
-                
-                # if hard update is needed
-                # if update_cnt % self.target_update == 0:
-                #     self._target_hard_update()
-            
-            scores.append(score)
-            if args.logging: wandb.log({"score": score})
-                
+        if self.args.plotting:
+            self._plot(rewards, scores, losses, regrets, arm_weights, np.array(data))
+
         self.env.close()
-        self._plot(scores, losses, arm_weights, np.array(data), epsilons)
         
     def test(self, episode_length) -> None:
         """Test the agent."""
         self.is_test = True
-        epsilon = 1
         
         # for recording a video
-        naive_env = self.env
-        # self.env = gym.wrappers.RecordVideo(self.env, video_folder=video_folder)
+        naive_env = self.env # remove?
         
         state, _ = self.env.reset()
         score = 0
         
         for _ in range(episode_length):
-            action = self.select_action(state, epsilon)
-            next_state, reward = self.step(state, action)
-            
+            action = self.select_action(state)
+            next_state, reward, _ = self.step(state, action)
+
             state = next_state
             score += reward
-            
-            # Decay epsilon
-            epsilon = max(epsilon - 1/episode_length, 0)
         
         print("score: ", score)
         self.env.close()
         
         # reset
-        self.env = naive_env
+        self.env = naive_env # remove?
 
     def _compute_dqn_loss(self, samples: Dict[str, np.ndarray]) -> torch.Tensor:
         """Return dqn loss."""
-        device = self.device  # for shortening the following lines
+        device = self.device
         state = torch.FloatTensor(samples["obs"]).to(device)
-        # next_state = torch.FloatTensor(samples["next_obs"]).to(device)
         action = torch.LongTensor(samples["acts"].reshape(-1, 1)).to(device)
         reward = torch.FloatTensor(samples["rews"].reshape(-1, 1)).to(device)
-        # done = torch.FloatTensor(samples["done"].reshape(-1, 1)).to(device)
-        
-        # G_t   = r + gamma * v(s_{t+1})  if state != Terminal
-        #       = r                       otherwise
+
+        # line 18, 19, 24; every state is terminal
         curr_q_value = self.dqn(state).gather(1, action)
-        # next_q_value = self.dqn_target(next_state).max(
-        #     dim=1, keepdim=True
-        # )[0].detach()
-        # mask = 1 - done
-        # target = (reward + self.gamma * next_q_value * mask).to(self.device)
+        loss = F.mse_loss(curr_q_value, reward) # line 25
+        
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
 
-        # calculate dqn loss
-        # loss = F.smooth_l1_loss(curr_q_value, target)
-        loss = F.mse_loss(curr_q_value, reward)
-
-        return loss
-
-    # def _target_hard_update(self):
-    #     """Hard update: target <- local."""
-    #     self.dqn_target.load_state_dict(self.dqn.state_dict())
+        return loss.item()
 
     def _plot(
         self,
+        rewards: List[float],
         scores: List[float], 
         losses: List[float],
+        regrets: List[float],
         arm_weights: List[np.ndarray],
-        data: np.ndarray,
-        epsilons: List[float]
+        data: np.ndarray
     ):
         """Plot the training progresses."""
-        plt.figure(figsize=(15, 5))
-        plt.subplot(121)
-        plt.title('score: %s' % (np.mean(scores[-10:])))
-        plt.plot(scores)
-        plt.xlabel('Episode')
-        plt.ylabel('Score')
+        plt.figure(figsize=(17, 5))
 
-        plt.subplot(122)
-        plt.title('loss')
+        plt.subplot(131)
+        plt.title('Rewards and Scores')
+        plt.plot(rewards, label='Reward', alpha=0.5)
+        plt.plot(np.arange(0, len(rewards), 50), scores, label='Score (mean of 50)', linewidth=2)
+        plt.xlabel('Training Step')
+        plt.ylabel('Value')
+        plt.legend()
+
+        plt.subplot(132)
+        plt.title('Loss')
         plt.plot(losses)
-        plt.xlabel('Training Steps')
+        plt.xlabel('Training Step')
         plt.ylabel('Loss')
 
-
-        plt.figure(figsize=(10, 10))
-        plt.plot(epsilons)
+        plt.subplot(133)
+        plt.title('Regret')
+        plt.plot(regrets)
+        plt.xlabel('Training Step')
+        plt.ylabel('Regret')
 
         # ------------------------------------------------------
 
@@ -386,7 +372,7 @@ class DQNAgent:
             c=data[:, 2],
             cmap="viridis",
             alpha=0.6,
-            s=20,
+            s=15,
             edgecolors='black',
             linewidths=0.2
         )
@@ -400,20 +386,20 @@ class DQNAgent:
         # --- Bottom subplot: second scatter ---
         sample_data = sample_env(
             gym.make(
-                args.env_id,
-                arms=args.arms,
-                states=args.states,
-                optimal_arms=args.optimal_arms,
-                dynamic_rate=args.dynamic_rate,
-                pace=args.pace,
-                seed=args.seed,
-                optimal_mean=args.optimal_mean,
-                optimal_std=args.optimal_std,
-                min_suboptimal_mean=args.min_suboptimal_mean,
-                max_suboptimal_mean=args.max_suboptimal_mean,
-                suboptimal_std=args.suboptimal_std
-            ) 
-        )
+                self.args.env_id,
+                arms=self.args.arms,
+                states=self.args.states,
+                optimal_arms=self.args.optimal_arms,
+                dynamic_rate=self.args.dynamic_rate,
+                pace=self.args.pace,
+                seed=self.args.seed,
+                optimal_mean=self.args.optimal_mean,
+                optimal_std=self.args.optimal_std,
+                min_suboptimal_mean=self.args.min_suboptimal_mean,
+                max_suboptimal_mean=self.args.max_suboptimal_mean,
+                suboptimal_std=self.args.suboptimal_std,
+                noisy = False), 
+            1000)
 
         group_ids = np.unique(sample_data[:, 1])
 
@@ -433,20 +419,20 @@ class DQNAgent:
         ax[1].set_xlabel("State")
         ax[1].set_ylabel("Reward")
         ax[1].grid(True)
-        ax[1].legend(loc="upper right", fontsize="small", ncol=2)
 
         plt.tight_layout()
-        plt.show()
+        if self.args.show_plot: plt.show()
 
-        if args.logging:
+        if self.args.logging:
             wandb.log({"Reward Scatter": wandb.Image(fig)})
 
-def sample_env(env, num_samples=10000): # somehow just sampling the reward functions didn't work
-    state, _ = env.reset(seed=args.seed)
+def sample_env(_env, num_samples=1000):
+    """somehow just sampling the reward functions didn't work"""
+    state, _ = _env.reset()
     _data = []
     for _ in range(num_samples):
-        action = env.action_space.sample()
-        next_state, reward, _, _, _ = env.step(action)
+        action = _env.action_space.sample()
+        next_state, reward, _, _, _ = _env.step(action)
         state_index = float(state[0])
         _data.append([state_index, action, float(reward)])
         state = next_state
@@ -457,7 +443,6 @@ def sample_env(env, num_samples=10000): # somehow just sampling the reward funct
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    print(args.seed)
     run_name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
     if args.logging:wandb.init(
         project=args.wandb_project_name,
@@ -486,17 +471,54 @@ if __name__ == "__main__":
         optimal_std=args.optimal_std,
         min_suboptimal_mean=args.min_suboptimal_mean,
         max_suboptimal_mean=args.max_suboptimal_mean,
-        suboptimal_std=args.suboptimal_std)
+        suboptimal_std=args.suboptimal_std,
+        noisy = False)
 
-    agent = DQNAgent(
-        env,
-        args.memory_size,
-        args.batch_size,
-        args.target_update,
-        args.seed,
-        args.gamma
-    )
+    agent = DQNAgent(env, args)
+
+    print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")
+
     agent.train(args.num_episodes)
-    agent.test(100)
+    # agent.test(100)
 
-    if args.logging: wandb.finish()
+    if args.logging:
+        wandb.finish()
+
+####################################################################################################
+
+def wandb_sweep():
+    with wandb.init() as run:
+        config = wandb.config
+
+        args = Args(
+            # batch_size=config.batch_size,
+            # memory_size=config.memory_size,
+            hidden_layer_size=config.hidden_layer_size,
+            pace=config.pace,
+            noisy_layer_distr_type=config.noisy_layer_distr_type,
+            noisy_layer_init_std=config.noisy_layer_init_std,
+            noisy_output=config.noisy_output
+        )
+
+        run.name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
+
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+
+        env = gym.make(
+            args.env_id,
+            arms=args.arms,
+            states=args.states,
+            optimal_arms=args.optimal_arms,
+            dynamic_rate=args.dynamic_rate,
+            pace=args.pace,
+            seed=args.seed,
+            optimal_mean=args.optimal_mean,
+            optimal_std=args.optimal_std,
+            min_suboptimal_mean=args.min_suboptimal_mean,
+            max_suboptimal_mean=args.max_suboptimal_mean,
+            suboptimal_std=args.suboptimal_std)
+
+        agent = DQNAgent(env, args)
+        print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")
+        agent.train(args.num_episodes)

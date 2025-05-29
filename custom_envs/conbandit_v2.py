@@ -9,24 +9,30 @@ ObsType = TypeVar("ObsType")
 ActType = TypeVar("ActType")
 
 
-class ConbanditEnv1(gym.Env):
+class ConbanditEnv2(gym.Env):
     """
     Multi-armed bandit environment with a continuous state
     """
     metadata = {'render_modes': []}
 
-    def reward(self, state: float, action: int) -> float:
+    # def sigmoid(self, z, a):
+    #     return 1 / (1 + np.exp(-z + a))
+
+    def reward(self, state: np.ndarray, action: int) -> float:
         # LINEAR
-        # return self.intercepts[action] + self.slopes[action] * state
+        # return np.sum(self.slopes[action] * state + self.intercepts[action])
 
         # SIGMOID
-        return (1 / (1 + np.exp(-self.intercepts[action] - self.slopes[action] * state))).item()
+        return np.sum(1 / (1 + np.exp(-self.intercepts[action] - self.slopes[action] * state)))
 
         # NORMAL PDF
         # mean = self.intercepts[action]
         # std_dev = self.slopes[action]
-        # # std_dev = 0.1
-        # return (1 / (std_dev * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((state - mean) / std_dev) ** 2)
+        # return np.sum((1 / (std_dev * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((state - mean) / std_dev) ** 2))
+
+    def optimal_reward(self, state: np.ndarray) -> int:
+        arr = [self.reward(state, action) for action in range(self.arms)]
+        return np.argmax(arr), np.max(arr)
 
     def __draw_arms(self):
         """
@@ -42,17 +48,17 @@ class ConbanditEnv1(gym.Env):
         #     self.stds.append([self.optimal_std if arm in optimal_arms else self.suboptimal_std
         #                       for arm in range(self.arms)])
 
-        self.intercepts = self.rng.uniform(-2, 2, self.arms)
-        self.slopes = self.rng.uniform(-1, 1, self.arms)
+        self.intercepts = self.rng.uniform(-2, 2, (self.arms, self.dims))
+        self.slopes = self.rng.uniform(-1, 1, (self.arms, self.dims))
 
     def __draw_state(self): 
-        self.state = self.rng.normal(0, 1, 1)
-        # self.state = self.rng.uniform(-3, 3, 1)
+        self.state = self.rng.normal(0, 1, self.dims)
+        # self.state = self.rng.uniform(-3.0, 3.0, 1)
 
-    def __init__(self, arms: int = 10, states: int = 2, optimal_arms: int | list[int] = 1,
-                 dynamic_rate: int | None = None, pace: int = 5, seed: int | None = None, optimal_mean: float = 10,
+    def __init__(self, dims: int = 1, arms: int = 10, states: int = 2, optimal_arms: int | list[int] = 1,
+                 dynamic_rate: int | None = None, pace: int = 1, seed: int | None = None, optimal_mean: float = 10,
                  optimal_std: float = 1, min_suboptimal_mean: float = 0, max_suboptimal_mean: float = 5,
-                 suboptimal_std: float = 1):
+                 suboptimal_std: float = 1, noisy: bool = False):
         """
         Multi-armed bandit environment with k arms and n states
         :param arms: number of arms
@@ -66,12 +72,14 @@ class ConbanditEnv1(gym.Env):
         :param max_suboptimal_mean: max mean of suboptimal arms
         :param suboptimal_std: std of suboptimal arms
         """
+        self.dims = dims
         self.arms = arms
         # self.states = states
         self.dynamic_rate = dynamic_rate
         self.pace = pace
         self.initial_seed = seed
         self.seed = seed
+        self.noisy = noisy
 
         # TODO reimplement
         # self.optimal_mean = optimal_mean
@@ -88,8 +96,9 @@ class ConbanditEnv1(gym.Env):
 
         self.rng = np.random.default_rng(self.seed)
 
-        self.action_space = gym.spaces.Discrete(arms)
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        self.action_space = gym.spaces.Discrete(self.arms)
+        # todo shouldn't low and high be -4 to 4?
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.dims,), dtype=np.float32)
 
         self.pulls = 0
         self.ssr = 0
@@ -121,19 +130,23 @@ class ConbanditEnv1(gym.Env):
         :param action: arm to pull
         :return: observation, reward, done, term, info
         """
-        # reward = self.rng.normal(self.offsets[0][self.state][action], self.stds[self.state][action], 1)[0]
         reward = self.reward(self.state, action)
+        if self.noisy:
+            reward = self.rng.normal(reward, 0.1, 1)[0]
+
+        # Calculate regret before redrawing state and arms!!
+        optimal_reward_action, optimal_reward = self.optimal_reward(self.state)
+        regret = optimal_reward - reward
 
         self.ssr += 1
         if self.pace is None or self.ssr % self.pace == 0:
             self.__draw_state()
 
         self.pulls += 1
-        # if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
-        #     print(f"Changing arms")
-        #     if self.seed is not None:
-        #         self.seed += 1
-        #     self.__draw_arms()
+        if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
+            print(f"Changing arms")
+            if self.seed is not None:
+                self.seed += 1
+            self.__draw_arms()
 
-        return np.array(self.state, dtype=np.float32), reward, False, False, {}
-
+        return np.array(self.state, dtype=np.float32), reward, False, False, {'regret': regret}
