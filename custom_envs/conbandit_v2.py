@@ -74,8 +74,7 @@ class ConbanditEnv2(gym.Env):
 
         self._total_regret = 0.
         self.action_space = gym.spaces.Discrete(self.arms)
-        # todo shouldn't low and high be -4 to 4?
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(low=-4, high=4, shape=(1,), dtype=np.float32)
 
         self.pulls = 0
         self.ssr = 0

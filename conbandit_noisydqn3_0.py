@@ -67,6 +67,7 @@ class Args:
 
     arms: int = 10
     dynamic_rate: int | None = None
+    noisy: bool = False
 
 ####################################################################################################
 
@@ -150,12 +151,12 @@ class DQNAgent:
             env (gym.Env): openAI Gym environment
             args (Args): arguments
         """
-        obs_dim = env.observation_space.shape[0]
-        action_dim = env.action_space.n
+        self.obs_dim = env.observation_space.shape[0]
+        self.action_dim = env.action_space.n
         
         self.env = env
         self.args = args
-        self.memory = ReplayBuffer(obs_dim, self.args.memory_size, self.args.batch_size)
+        self.memory = ReplayBuffer(self.obs_dim, self.args.memory_size, self.args.batch_size)
         
         # device: cpu / gpu
         self.device = torch.device(
@@ -163,7 +164,13 @@ class DQNAgent:
         )
 
         # networks: dqn
-        self.dqn = Network(obs_dim, self.args.hidden_layer_size, action_dim, self.args.noisy_layer_distr_type, self.args.noisy_layer_init_std, self.args.noisy_output).to(self.device)
+        self.dqn = Network(self.obs_dim,
+                           self.args.hidden_layer_size,
+                           self.action_dim,
+                           self.args.noisy_layer_distr_type,
+                           self.args.noisy_layer_init_std,
+                           self.args.noisy_output
+                        ).to(self.device)
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
@@ -224,14 +231,13 @@ class DQNAgent:
 
             if self.args.logging: wandb.log({"regret": info['regret']})
 
-            if step_id % 10 == 0:
-                ## Scatterplot background ======
+            # Scatterplot background
+            if step_id % 10 == 0 and self.obs_dim == 1:
                 x = np.linspace(-3, 3, 100)
                 # put each x value forward through the network
                 q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
                 best_actions = np.argmax(q_values, axis=1)
                 arm_weights.append((step_id, best_actions))
-                ## =============================
 
             if step_id % 50 == 0:
                 # score += sum(rewards[-50:])
@@ -320,76 +326,76 @@ class DQNAgent:
 
         # ------------------------------------------------------
 
-        fig, ax = plt.subplots(2, 1, figsize=(15, 10))
+        if self.obs_dim == 1:
+            fig, ax = plt.subplots(2, 1, figsize=(15, 10))
 
-        # --- Top subplot: heatmap + scatter overlay ---
-        step_ids = [step for step, _ in arm_weights]
-        x_vals = np.linspace(-3, 3, 100)
-        action_matrix = np.stack([actions for _, actions in arm_weights], axis=0)
+            # --- Top subplot: heatmap + scatter overlay ---
+            step_ids = [step for step, _ in arm_weights]
+            x_vals = np.linspace(-3, 3, 100)
+            action_matrix = np.stack([actions for _, actions in arm_weights], axis=0)
 
-        # Heatmap
-        im = ax[0].imshow(
-            action_matrix,
-            aspect='auto',
-            extent=[x_vals[0], x_vals[-1], step_ids[0], step_ids[-1]],
-            origin='lower',
-            cmap='viridis'
-        )
+            # Heatmap
+            im = ax[0].imshow(
+                action_matrix,
+                aspect='auto',
+                extent=[x_vals[0], x_vals[-1], step_ids[0], step_ids[-1]],
+                origin='lower',
+                cmap='viridis'
+            )
 
-        # Overlay scatter1
-        scatter1 = ax[0].scatter(
-            data[:, 1], data[:, 0],
-            c=data[:, 2],
-            cmap="viridis",
-            alpha=0.6,
-            s=15,
-            edgecolors='black',
-            linewidths=0.2
-        )
-        fig.colorbar(scatter1, ax=ax[0], label="Action")
-        ax[0].set_xlabel("State")
-        ax[0].set_ylabel("Training Step")
-        ax[0].set_title("Best Action Heatmap and Scatter Overlay")
-        ax[0].grid(True)
+            # Overlay scatter1
+            scatter1 = ax[0].scatter(
+                data[:, 1], data[:, 0],
+                c=data[:, 2],
+                cmap="viridis",
+                alpha=0.6,
+                s=15,
+                edgecolors='black',
+                linewidths=0.2
+            )
+            fig.colorbar(scatter1, ax=ax[0], label="Action")
+            ax[0].set_xlabel("State")
+            ax[0].set_ylabel("Training Step")
+            ax[0].set_title("Best Action Heatmap and Scatter Overlay")
+            ax[0].grid(True)
 
 
-        # --- Bottom subplot: second scatter ---
-        sample_data = sample_env(
-            gym.make(
-                self.args.env_id,
-                arms=self.args.arms,
-                dynamic_rate=self.args.dynamic_rate,
-                seed=self.args.seed,
-                noisy = False), 
-            1000)
+            # --- Bottom subplot: second scatter ---
+            sample_data = sample_env(self.args)
 
-        group_ids = np.unique(sample_data[:, 1])
+            group_ids = np.unique(sample_data[:, 1])
 
-        for gid in group_ids:
-            group_mask = sample_data[:, 1] == gid
-            group_data = sample_data[group_mask]
-            sorted_indices = np.argsort(group_data[:, 0])
-            ax[1].plot(group_data[sorted_indices, 0], group_data[sorted_indices, 2], alpha=0.4, linewidth=1.5,)
+            for gid in group_ids:
+                group_mask = sample_data[:, 1] == gid
+                group_data = sample_data[group_mask]
+                sorted_indices = np.argsort(group_data[:, 0])
+                ax[1].plot(group_data[sorted_indices, 0], group_data[sorted_indices, 2], alpha=0.4, linewidth=1.5,)
 
-        timesteps = data[:, 0]
-        # normalized = (timesteps - timesteps.min()) / (timesteps.max() - timesteps.min() + 1e-8)
-        # size = 80 * normalized
-        size = 80 * timesteps / (timesteps.max() - timesteps.min())
+            timesteps = data[:, 0]
+            # normalized = (timesteps - timesteps.min()) / (timesteps.max() - timesteps.min() + 1e-8)
+            # size = 80 * normalized
+            size = 80 * timesteps / (timesteps.max() - timesteps.min())
 
-        scatter2 = ax[1].scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6, s=size)
-        fig.colorbar(scatter2, ax=ax[1], label="Action")
-        ax[1].set_xlabel("State")
-        ax[1].set_ylabel("Reward")
-        ax[1].grid(True)
+            scatter2 = ax[1].scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6, s=size)
+            fig.colorbar(scatter2, ax=ax[1], label="Action")
+            ax[1].set_xlabel("State")
+            ax[1].set_ylabel("Reward")
+            ax[1].grid(True)
 
-        plt.tight_layout()
+            plt.tight_layout()
         plt.show()
 
         if self.args.logging:
             wandb.log({"Reward Scatter": wandb.Image(fig)})
 
-def sample_env(_env, num_samples=1000):
+def sample_env(args, num_samples=1000):
     """somehow just sampling the reward functions didn't work"""
+    _env = gym.make(
+                args.env_id,
+                arms=args.arms,
+                dynamic_rate=args.dynamic_rate,
+                seed=args.seed,
+                noisy = False)
     state, _ = _env.reset()
     _data = []
     for _ in range(num_samples):
@@ -426,7 +432,7 @@ if __name__ == "__main__":
         arms=args.arms,
         dynamic_rate=args.dynamic_rate,
         seed=args.seed,
-        noisy = False
+        noisy=args.noisy
     )
 
     agent = DQNAgent(env, args)
@@ -462,7 +468,8 @@ def wandb_sweep():
             args.env_id,
             arms=args.arms,
             dynamic_rate=args.dynamic_rate,
-            seed=args.seed
+            seed=args.seed,
+            noisy=args.noisy
         )
 
         agent = DQNAgent(env, args)

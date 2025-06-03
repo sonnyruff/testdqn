@@ -42,12 +42,15 @@ from six.moves.urllib.request import urlretrieve
 
 class MNISTBanditEnv(gym.Env):
     """MNIST classification as a bandit environment."""
-
-    def __init__(self, fraction: float = 1., seed: Optional[int] = None):
+    
+    def __init__(self, dims: int = 1,
+                 arms: int = 10,
+                 dynamic_rate: int | None = None,
+                 seed: int | None = None,
+                 noisy: bool = False):
         """Loads the MNIST training set (60K images & labels) as numpy arrays.
 
         Args:
-            fraction: What fraction of the training set to keep (default is all).
             seed: Optional integer. Seed for numpy's random number generator (RNG).
         """
         super().__init__()
@@ -55,7 +58,7 @@ class MNISTBanditEnv(gym.Env):
 
         num_data = len(labels)
 
-        self._num_data = int(fraction * num_data)
+        self._num_data = int(num_data)
         self._image_shape = images.shape[1:]
 
         self._images = images[:self._num_data]
@@ -67,7 +70,6 @@ class MNISTBanditEnv(gym.Env):
         self._optimal_return = 1.
         
         self.action_space = gym.spaces.Discrete(10)
-        # self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self._image_shape), dtype=np.float32)
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=(np.prod(self._image_shape),), dtype=np.float32)
 
     def reset(self,
