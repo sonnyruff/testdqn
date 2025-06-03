@@ -12,7 +12,7 @@ Based on:
 - OpenAI Gym (https://github.com/openai/gym) & Buffalo Gym enviroment (https://github.com/foreverska/buffalo-gym)
 
 e.g.
-py conbandit_noisydqn3_0.py --seed 8796 --no-logging --plotting --show-plot --hidden-layer-size 10 --arms 10 --pace 5
+py conbandit_noisydqn3_0.py --seed 8796 --no-logging --plotting --show-plot --hidden-layer-size 10 --arms 10
 """
 import os
 from datetime import datetime
@@ -45,8 +45,6 @@ class Args:
     """the wandb's project name"""
     plotting: bool = False
     """whether to plot the results"""
-    show_plot: bool = False
-    """whether to show the plot"""
     logging: bool = True
     """whether to log to wandb"""
 
@@ -69,7 +67,6 @@ class Args:
 
     arms: int = 10
     dynamic_rate: int | None = None
-    pace: int = 5
 
 ####################################################################################################
 
@@ -220,7 +217,7 @@ class DQNAgent:
             data.append([step_id, float(state[0]), action, float(reward)]) # line 8
 
             # regrets.append(self.env.unwrapped.reward(state, action) - reward) # !!! THIS DOESN'T WORK
-            regrets.append(info['regret'])
+            regrets.append(info['total_regret'])
             rewards.append(reward)
 
             state = next_state
@@ -271,29 +268,6 @@ class DQNAgent:
             self._plot(rewards, scores, losses, regrets, arm_weights, np.array(data))
 
         self.env.close()
-        
-    def test(self, episode_length) -> None:
-        """Test the agent."""
-        self.is_test = True
-        
-        # for recording a video
-        naive_env = self.env # remove?
-        
-        state, _ = self.env.reset()
-        score = 0
-        
-        for _ in range(episode_length):
-            action = self.select_action(state)
-            next_state, reward, _ = self.step(state, action)
-
-            state = next_state
-            score += reward
-        
-        print("score: ", score)
-        self.env.close()
-        
-        # reset
-        self.env = naive_env # remove?
 
     def _compute_dqn_loss(self, samples: Dict[str, np.ndarray]) -> torch.Tensor:
         """Return dqn loss."""
@@ -385,7 +359,6 @@ class DQNAgent:
                 self.args.env_id,
                 arms=self.args.arms,
                 dynamic_rate=self.args.dynamic_rate,
-                pace=self.args.pace,
                 seed=self.args.seed,
                 noisy = False), 
             1000)
@@ -410,7 +383,7 @@ class DQNAgent:
         ax[1].grid(True)
 
         plt.tight_layout()
-        if self.args.show_plot: plt.show()
+        plt.show()
 
         if self.args.logging:
             wandb.log({"Reward Scatter": wandb.Image(fig)})
@@ -452,7 +425,6 @@ if __name__ == "__main__":
         args.env_id,
         arms=args.arms,
         dynamic_rate=args.dynamic_rate,
-        pace=args.pace,
         seed=args.seed,
         noisy = False
     )
@@ -462,7 +434,6 @@ if __name__ == "__main__":
     print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")
 
     agent.train(args.num_episodes)
-    # agent.test(100)
 
     if args.logging:
         wandb.finish()
@@ -477,7 +448,6 @@ def wandb_sweep():
             # batch_size=config.batch_size,
             # memory_size=config.memory_size,
             hidden_layer_size=config.hidden_layer_size,
-            pace=config.pace,
             noisy_layer_distr_type=config.noisy_layer_distr_type,
             noisy_layer_init_std=config.noisy_layer_init_std,
             noisy_output=config.noisy_output
@@ -492,7 +462,6 @@ def wandb_sweep():
             args.env_id,
             arms=args.arms,
             dynamic_rate=args.dynamic_rate,
-            pace=args.pace,
             seed=args.seed
         )
 

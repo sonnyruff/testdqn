@@ -1,12 +1,13 @@
 from typing import Any, TypeVar, SupportsFloat
+ObsType = TypeVar("ObsType")
+ActType = TypeVar("ActType")
+
 import random
 import matplotlib.pyplot as plt
 
-import gymnasium as gym
 import numpy as np
+import gymnasium as gym
 
-ObsType = TypeVar("ObsType")
-ActType = TypeVar("ActType")
 
 
 class ConbanditEnv2(gym.Env):
@@ -58,7 +59,7 @@ class ConbanditEnv2(gym.Env):
     def __init__(self, dims: int = 1,
                  arms: int = 10,
                  dynamic_rate: int | None = None,
-                 pace: int = 1, seed: int | None = None,
+                 seed: int | None = None,
                  noisy: bool = False):
         """
         Multi-armed bandit environment with k arms and n states
@@ -69,13 +70,13 @@ class ConbanditEnv2(gym.Env):
         self.dims = dims
         self.arms = arms
         self.dynamic_rate = dynamic_rate
-        self.pace = pace
         self.initial_seed = seed
         self.seed = seed
         self.noisy = noisy
 
         self.rng = np.random.default_rng(self.seed)
 
+        self._total_regret = 0.
         self.action_space = gym.spaces.Discrete(self.arms)
         # todo shouldn't low and high be -4 to 4?
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.dims,), dtype=np.float32)
@@ -117,10 +118,9 @@ class ConbanditEnv2(gym.Env):
         # Calculate regret before redrawing state and arms!!
         optimal_reward_action, optimal_reward = self.optimal_reward(self.state)
         regret = optimal_reward - reward
+        self._total_regret += regret
 
-        self.ssr += 1
-        if self.pace is None or self.ssr % self.pace == 0:
-            self.__draw_state()
+        self.__draw_state()
 
         self.pulls += 1
         if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
@@ -129,4 +129,4 @@ class ConbanditEnv2(gym.Env):
                 self.seed += 1
             self.__draw_arms()
 
-        return np.array(self.state, dtype=np.float32), reward, False, False, {'regret': regret}
+        return np.array(self.state, dtype=np.float32), reward, False, False, {'regret': regret, 'total_regret': self._total_regret}
