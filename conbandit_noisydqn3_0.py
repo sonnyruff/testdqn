@@ -229,7 +229,8 @@ class DQNAgent:
 
             state = next_state
 
-            if self.args.logging: wandb.log({"regret": info['regret']})
+            if self.args.logging:
+                wandb.log({"regret": info['regret']})
 
             # Scatterplot background
             if step_id % 10 == 0 and self.obs_dim == 1:
@@ -240,7 +241,6 @@ class DQNAgent:
                 arm_weights.append((step_id, best_actions))
 
             if step_id % 50 == 0:
-                # score += sum(rewards[-50:])
                 score += np.mean(rewards[-50:])
                 scores.append(score)
                 if self.args.logging: wandb.log({"score": score})
@@ -254,20 +254,8 @@ class DQNAgent:
                 loss = self._compute_dqn_loss(samples)
                 losses.append(loss)
                 if self.args.logging: wandb.log({"loss": loss})
-
-                # noise_l1 = self.dqn.noisy_layer1.get_noise()
-                # noise_l2 = self.dqn.noisy_layer2.get_noise()
-                # if self.args.logging:
-                #     wandb.log({
-                #         "noisy_layer1/weight_epsilon_std": np.std(noise_l1["weight_epsilon"]),
-                #         "noisy_layer1/bias_epsilon_std": np.std(noise_l1["bias_epsilon"]),
-                #         "noisy_layer2/weight_epsilon_std": np.std(noise_l2["weight_epsilon"]),
-                #         "noisy_layer2/bias_epsilon_std": np.std(noise_l2["bias_epsilon"])
-                #     })
                 
-        # print(f"Mean rewards: {np.mean(rewards[-100:])}")
         if self.args.logging:
-            # wandb.run.summary["mean_rewards"] = np.mean(rewards[-100:])
             wandb.run.summary["mean_regret"] = np.mean(regrets[-100:])
 
         if self.args.plotting:
