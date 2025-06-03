@@ -55,44 +55,24 @@ class ConbanditEnv2(gym.Env):
         self.state = self.rng.normal(0, 1, self.dims)
         # self.state = self.rng.uniform(-3.0, 3.0, 1)
 
-    def __init__(self, dims: int = 1, arms: int = 10, states: int = 2, optimal_arms: int | list[int] = 1,
-                 dynamic_rate: int | None = None, pace: int = 1, seed: int | None = None, optimal_mean: float = 10,
-                 optimal_std: float = 1, min_suboptimal_mean: float = 0, max_suboptimal_mean: float = 5,
-                 suboptimal_std: float = 1, noisy: bool = False):
+    def __init__(self, dims: int = 1,
+                 arms: int = 10,
+                 dynamic_rate: int | None = None,
+                 pace: int = 1, seed: int | None = None,
+                 noisy: bool = False):
         """
         Multi-armed bandit environment with k arms and n states
         :param arms: number of arms
-        :param states: number of states
-        :param optimal_arms: number of optimal arms or list of optimal orms in each state
         :param dynamic_rate: number of steps between drawing new arm means, None means no dynamic rate
         :param seed: random seed
-        :param optimal_mean: mean of optimal arms
-        :param optimal_std: std of optimal arms
-        :param min_suboptimal_mean: min mean of suboptimal arms
-        :param max_suboptimal_mean: max mean of suboptimal arms
-        :param suboptimal_std: std of suboptimal arms
         """
         self.dims = dims
         self.arms = arms
-        # self.states = states
         self.dynamic_rate = dynamic_rate
         self.pace = pace
         self.initial_seed = seed
         self.seed = seed
         self.noisy = noisy
-
-        # TODO reimplement
-        # self.optimal_mean = optimal_mean
-        # self.min_suboptimal_mean = min_suboptimal_mean
-        # self.max_suboptimal_mean = max_suboptimal_mean
-
-        # TODO reimplement
-        # self.optimal_std = optimal_std
-        # self.suboptimal_std = suboptimal_std
-
-        # if optimal_arms is list and len(optimal_arms) != self.arms:
-        #     raise ValueError("Optimal arms list must have equal number of arms")
-        # self.optimal_arms = optimal_arms
 
         self.rng = np.random.default_rng(self.seed)
 

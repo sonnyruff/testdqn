@@ -9,7 +9,10 @@ Date: 12-05-2025
 Based on:
 - NoisyNet-DQN implementation from https://nbviewer.org/github/Curt-Park/rainbow-is-all-you-need/blob/master/05.noisy_net.ipynb
 - Parts of https://github.com/knyazer/nanodqn/tree/main
-- OpenAI Gym (https://github.com/openai/gym) & Buffalo Gym environment (https://github.com/foreverska/buffalo-gym)
+- OpenAI Gym (https://github.com/openai/gym) & Buffalo Gym enviroment (https://github.com/foreverska/buffalo-gym)
+
+e.g.
+py conbandit_noisydqn3_0.py --seed 8796 --no-logging --plotting --show-plot --hidden-layer-size 10 --arms 10 --pace 5
 """
 import os
 from datetime import datetime
@@ -65,15 +68,8 @@ class Args:
     hidden_layer_size: int = 10
 
     arms: int = 10
-    states: int = 2
-    optimal_arms: int | list[int] = 1
     dynamic_rate: int | None = None
     pace: int = 5
-    optimal_mean: float = 10
-    optimal_std: float = 1
-    min_suboptimal_mean: float = 0
-    max_suboptimal_mean: float = 5
-    suboptimal_std: float = 1
 
 ####################################################################################################
 
@@ -388,16 +384,9 @@ class DQNAgent:
             gym.make(
                 self.args.env_id,
                 arms=self.args.arms,
-                states=self.args.states,
-                optimal_arms=self.args.optimal_arms,
                 dynamic_rate=self.args.dynamic_rate,
                 pace=self.args.pace,
                 seed=self.args.seed,
-                optimal_mean=self.args.optimal_mean,
-                optimal_std=self.args.optimal_std,
-                min_suboptimal_mean=self.args.min_suboptimal_mean,
-                max_suboptimal_mean=self.args.max_suboptimal_mean,
-                suboptimal_std=self.args.suboptimal_std,
                 noisy = False), 
             1000)
 
@@ -462,17 +451,11 @@ if __name__ == "__main__":
     env = gym.make(
         args.env_id,
         arms=args.arms,
-        states=args.states,
-        optimal_arms=args.optimal_arms,
         dynamic_rate=args.dynamic_rate,
         pace=args.pace,
         seed=args.seed,
-        optimal_mean=args.optimal_mean,
-        optimal_std=args.optimal_std,
-        min_suboptimal_mean=args.min_suboptimal_mean,
-        max_suboptimal_mean=args.max_suboptimal_mean,
-        suboptimal_std=args.suboptimal_std,
-        noisy = False)
+        noisy = False
+    )
 
     agent = DQNAgent(env, args)
 
@@ -508,16 +491,10 @@ def wandb_sweep():
         env = gym.make(
             args.env_id,
             arms=args.arms,
-            states=args.states,
-            optimal_arms=args.optimal_arms,
             dynamic_rate=args.dynamic_rate,
             pace=args.pace,
-            seed=args.seed,
-            optimal_mean=args.optimal_mean,
-            optimal_std=args.optimal_std,
-            min_suboptimal_mean=args.min_suboptimal_mean,
-            max_suboptimal_mean=args.max_suboptimal_mean,
-            suboptimal_std=args.suboptimal_std)
+            seed=args.seed
+        )
 
         agent = DQNAgent(env, args)
         print(f"[ Environment: '{args.env_id}' | Seed: {args.seed} | Device: {agent.device} ]")
