@@ -16,15 +16,12 @@ class ConbanditEnv2(gym.Env):
     """
     metadata = {'render_modes': []}
 
-    # def sigmoid(self, z, a):
-    #     return 1 / (1 + np.exp(-z + a))
-
-    def reward(self, state: np.ndarray, action: int) -> float:
+    def reward(self, state: float, action: int) -> float:
         # LINEAR
-        # return np.sum(self.slopes[action] * state + self.intercepts[action])
+        # return self.slopes[action] * state + self.intercepts[action]
 
         # SIGMOID
-        return np.sum(1 / (1 + np.exp(-self.intercepts[action] - self.slopes[action] * state)))
+        return (1 / (1 + np.exp(-self.intercepts[action] - self.slopes[action] * state))).item()
 
         # NORMAL PDF
         # mean = self.intercepts[action]
@@ -49,14 +46,14 @@ class ConbanditEnv2(gym.Env):
         #     self.stds.append([self.optimal_std if arm in optimal_arms else self.suboptimal_std
         #                       for arm in range(self.arms)])
 
-        self.intercepts = self.rng.uniform(-2, 2, (self.arms, self.dims))
-        self.slopes = self.rng.uniform(-1, 1, (self.arms, self.dims))
+        self.intercepts = self.rng.uniform(-2, 2, self.arms)
+        self.slopes = self.rng.uniform(-1, 1, self.arms)
 
     def __draw_state(self): 
-        self.state = self.rng.normal(0, 1, self.dims)
+        self.state = self.rng.normal(0, 1, 1)
         # self.state = self.rng.uniform(-3.0, 3.0, 1)
 
-    def __init__(self, dims: int = 1,
+    def __init__(self,
                  arms: int = 10,
                  dynamic_rate: int | None = None,
                  seed: int | None = None,
@@ -67,7 +64,6 @@ class ConbanditEnv2(gym.Env):
         :param dynamic_rate: number of steps between drawing new arm means, None means no dynamic rate
         :param seed: random seed
         """
-        self.dims = dims
         self.arms = arms
         self.dynamic_rate = dynamic_rate
         self.initial_seed = seed
@@ -79,7 +75,7 @@ class ConbanditEnv2(gym.Env):
         self._total_regret = 0.
         self.action_space = gym.spaces.Discrete(self.arms)
         # todo shouldn't low and high be -4 to 4?
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(self.dims,), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
 
         self.pulls = 0
         self.ssr = 0
