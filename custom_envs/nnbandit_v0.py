@@ -27,12 +27,14 @@ class NNBanditEnv(gym.Env):
         self.dynamic_rate = dynamic_rate
         self.initial_seed = seed
         self.seed = seed
+        self.noisy = noisy
+        torch.manual_seed(self.seed) # Should be done here instead of in the dqn file
         self.rng = np.random.default_rng(self.seed)
 
         self._total_regret = 0.
 
         self.action_space = gym.spaces.Discrete(self.arms)
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(low=-4, high=4, shape=(1,), dtype=np.float32)
         self.state = None
 
         self.pulls = 0
@@ -65,6 +67,8 @@ class NNBanditEnv(gym.Env):
         """
         q_values = self.net(torch.FloatTensor(self.state)).detach().numpy()
         reward = q_values[action].item()
+        if self.noisy:
+            reward = self.rng.normal(reward, 0.1, 1)[0]
         
         regret = np.max(q_values) - reward
         self._total_regret += regret
@@ -99,11 +103,13 @@ class Network(nn.Module):
 
 if __name__ == '__main__':
     # env = NNBanditEnv(arms=10, seed=666)
+    torch.manual_seed(42)
     net = Network(1, 10, 10)
-    print(net(torch.tensor(np.random.uniform(0, 1, 1), dtype=torch.float32)))
-    print(net(torch.FloatTensor(np.random.uniform(0, 1, 1))))
-    print(np.argmax(net(torch.FloatTensor(np.random.uniform(0, 1, 1))).detach()))
-    print(np.argmax(net(torch.FloatTensor(np.random.uniform(0, 1, 1))).detach().numpy()))
+    print(net(torch.FloatTensor([0.])))
+    # print(net(torch.tensor(np.random.uniform(0, 1, 1), dtype=torch.float32)))
+    # print(net(torch.FloatTensor(np.random.uniform(0, 1, 1))))
+    # print(np.argmax(net(torch.FloatTensor(np.random.uniform(0, 1, 1))).detach()))
+    # print(np.argmax(net(torch.FloatTensor(np.random.uniform(0, 1, 1))).detach().numpy()))
 
     # env = NNBanditEnv(1, 10, 10)
     # obs, _ = env.reset()
