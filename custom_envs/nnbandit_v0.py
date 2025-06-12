@@ -6,6 +6,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
+import copy
 
 ObsType = TypeVar("ObsType")
 ActType = TypeVar("ActType")
@@ -23,6 +24,7 @@ class NNBanditEnv(gym.Env):
                  seed: int | None = None,
                  noisy: bool = False):
 
+        self._dims = 100
         self.arms = arms
         self.dynamic_rate = dynamic_rate
         self.initial_seed = seed
@@ -34,13 +36,13 @@ class NNBanditEnv(gym.Env):
         self._total_regret = 0.
 
         self.action_space = gym.spaces.Discrete(self.arms)
-        self.observation_space = gym.spaces.Box(low=-4, high=4, shape=(1,), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(low=-4, high=4, shape=(self._dims,), dtype=np.float32)
         self.state = None
 
         self.pulls = 0
         self.ssr = 0
 
-        self.net = Network(1, 10, self.arms)
+        self.net = Network(self._dims, self._dims, self.arms)
 
     def reset(self,
               *,
@@ -52,7 +54,7 @@ class NNBanditEnv(gym.Env):
         :param options: WARN unused, defaults to None
         :return: observation, info
         """
-        self.state = self.rng.normal(0, 1, 1)
+        self.state = self.rng.normal(0, 1, self._dims)
         self.seed = seed
         self.pulls = 0
         self.ssr = 0
@@ -73,14 +75,13 @@ class NNBanditEnv(gym.Env):
         regret = np.max(q_values) - reward
         self._total_regret += regret
 
-        self.state = self.rng.normal(0, 1, 1)
+        self.state = self.rng.normal(0, 1, self._dims)
         
         # self.pulls += 1
         # if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
-        #     print(f"Changing arms")
-        #     if self.seed is not None:
-        #         self.seed += 1
-        #     self.__draw_arms()
+            # if self.seed is not None:
+            #     self.seed += 1
+            # self.__draw_arms()
 
         return self.state, reward, False, False, {'regret': regret, 'total_regret': self._total_regret}
     
@@ -99,13 +100,33 @@ class Network(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
-    
+
+    def shift_weights_and_biases(self, factor):
+        with torch.no_grad():
+            for param in self.parameters():
+                randn = torch.randn_like(param)
+                param += factor * randn.div_(randn.max())
+
+def delta(net, factor):
+    y = net(torch.FloatTensor([0.]))
+    _net = copy.deepcopy(net)
+    _net.shift_weights_and_biases(factor)
+    _y = _net(torch.FloatTensor([0.]))
+    print(f"{factor} : {y - _y}")
+
 
 if __name__ == '__main__':
     # env = NNBanditEnv(arms=10, seed=666)
     torch.manual_seed(42)
     net = Network(1, 10, 10)
-    print(net(torch.FloatTensor([0.])))
+    # print(net(torch.FloatTensor([0.])))
+    delta(net, 0.01)
+    # print(net(torch.FloatTensor([0.])))
+    delta(net, 0.05)
+    # print(net(torch.FloatTensor([0.])))
+    delta(net, 0.1)
+
+
     # print(net(torch.tensor(np.random.uniform(0, 1, 1), dtype=torch.float32)))
     # print(net(torch.FloatTensor(np.random.uniform(0, 1, 1))))
     # print(np.argmax(net(torch.FloatTensor(np.random.uniform(0, 1, 1))).detach()))
