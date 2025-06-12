@@ -1,5 +1,6 @@
 """
-NoisyNet-DQN implementation for ContextualBandit-v1 - Continuous input state
+NoisyNet-DQN implementation for ContextualBandit-v2, MNISTBandit-v0 and NNBandit-v0
+Continuous input state
 Single loop version
 Single network
 
@@ -12,16 +13,12 @@ Based on:
 - OpenAI Gym (https://github.com/openai/gym) & Buffalo Gym environment (https://github.com/foreverska/buffalo-gym)
 
 e.g.
- - Environment visualisation is only available for 1 dimension
-    py conbandit_combi1_0.py --network-type NOISY
- - More dimensions only show a reward and loss plot
-    py conbandit_combi1_0.py --network-type NOISY --dims 20
- - The network with regular linear layers provide an epsilon history plot
-    py conbandit_combi1_0.py --network-type REGULAR
- - Non-static environements
-    py conbandit_combi1_0.py --network-type REGULAR --dims 1 --dynamic-rate 100 
-
-    py conbandit_combi1_0.py --seed 8796 --no-logging --network-type NOISY --dims 20    
+py conbandit_combi1_0.py --no-logging --plotting
+py conbandit_combi1_0.py --no-logging --plotting --env-id MNISTBandit-v0
+py conbandit_combi1_0.py --no-logging --plotting --env-id NNBandit-v0
+py conbandit_combi1_0.py --no-logging --plotting --no-noisy-net
+py conbandit_combi1_0.py --no-logging --plotting --env-id MNISTBandit-v0 --no-noisy-net
+py conbandit_combi1_0.py --no-logging --plotting --env-id NNBandit-v0 --no-noisy-net
 """
 import os
 from datetime import datetime
@@ -47,12 +44,12 @@ from NoisyLinear import NoisyLinear
 @dataclass
 class Args:
     noisy_net: bool = True
-    """the type of network to use'"""
+    """whether to use NoisyNet"""
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
     """the name of this experiment"""
     seed: int = np.random.randint(0, 10000)
     """seed of the experiment"""
-    wandb_project_name: str = "noisynet-dqn"
+    wandb_project_name: str = "NoisyNeuralNet-v3"
     """the wandb's project name"""
     plotting: bool = False
     """whether to plot the results"""
@@ -72,40 +69,46 @@ class Args:
     """the distribution of the noisy layer"""
     noisy_layer_init_std: float = 0.5
     """the initial standard deviation of the noisy layer"""
-    noisy_output: bool = True
 
     hidden_layer_size: int = 10
+    noisy_output_layer: bool = True
+    """whether to have to last layer of the network be a NoisyLinear layer"""
 
     arms: int = 10
     dynamic_rate: int | None = None
-    noisy: bool = False
+    noisy_reward: bool = False
+    """whether to add noise to the reward"""
 
 ####################################################################################################
 
 class NoisyNetwork(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, distr_type: str, init_std: float, noisy_output: bool):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, distr_type: str, init_std: float, noisy_output_layer: bool):
         super().__init__()
 
-        if noisy_output:
-            last_layer = NoisyLinear(hidden_dim, out_dim, distr_type, init_std)
-        else:
-            last_layer = nn.Linear(hidden_dim, out_dim)
-            
-        self.net = nn.Sequential(
-            nn.Linear(in_dim, hidden_dim),
-            nn.ReLU(),
-            NoisyLinear(hidden_dim, hidden_dim, distr_type, init_std),
-            nn.ReLU(),
-            last_layer
-        )
+        self.noisy_output_layer = noisy_output_layer
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        self.fc1 = nn.Linear(in_dim, hidden_dim)
+        self.relu1 = nn.ReLU()
+        self.fc2 = NoisyLinear(hidden_dim, hidden_dim, distr_type, init_std)
+        self.relu2 = nn.ReLU()
+
+        if noisy_output_layer:
+            self.fc3 = NoisyLinear(hidden_dim, out_dim, distr_type, init_std)
+        else:
+            self.fc3 = nn.Linear(hidden_dim, out_dim)
+
+    def forward(self, x: torch.Tensor, use_noise: bool = True) -> torch.Tensor:
+        x = self.fc1(x)
+        x = self.relu1(x)
+        x = self.fc2(x, use_noise)
+        x = self.relu2(x)
+        x = self.fc3(x, use_noise) if self.noisy_output_layer else self.fc3(x)
+        return x
 
     def resample_noise(self):
-        for layer in self.net:
-            if isinstance(layer, NoisyLinear):
-                layer.resample_noise()
+        self.fc2.resample_noise()
+        if self.noisy_output_layer:
+            self.fc3.resample_noise()
 
 class Network(nn.Module):
     def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
@@ -163,14 +166,13 @@ class DQNAgent:
         batch_size (int): batch size for sampling
         dqn (Network): model to train and select actions
         optimizer (torch.optim): optimizer for training dqn
-        transition (list): transition information including
-                           state, action, reward, next_state, done
     """
 
     def __init__(
         self, 
         env: gym.Env,
-        args: Args = None
+        args: Args = None,
+        is_sweep: bool = False
     ):
         """Initialization.
         
@@ -191,14 +193,13 @@ class DQNAgent:
             "cuda" if torch.cuda.is_available() else "cpu"
         )
 
-        # network: dqn
-        if args.noisy_net:
+        if self.args.noisy_net:
             self.dqn = NoisyNetwork(self.obs_dim,
                            self.args.hidden_layer_size,
                            self.action_dim,
                            self.args.noisy_layer_distr_type,
                            self.args.noisy_layer_init_std,
-                           self.args.noisy_output
+                           self.args.noisy_output_layer
                         ).to(self.device)
         else:
             self.dqn = Network(self.obs_dim,
@@ -208,25 +209,34 @@ class DQNAgent:
         
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
-
-        # transition to store in memory
-        self.transition = list()
         
         # mode: train / test
         self.is_test = False
+        self.is_sweep = is_sweep
 
     def select_action(self, state: np.ndarray) -> np.ndarray:
         """Select an action from the input state."""
-        if np.random.rand() < self.epsilon and not args.noisy_net:
-            selected_action = self.env.action_space.sample()
+        if self.args.noisy_net:
+            selected_action = self.dqn(torch.FloatTensor(state).to(self.device), use_noise=True).argmax().detach().numpy()
         else:
-            selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax()
-            selected_action = selected_action.detach().cpu().numpy()
-        
-        if not self.is_test:
-            self.transition = [state, selected_action]
+            if np.random.rand() < self.epsilon:
+                selected_action = self.env.action_space.sample()
+            else:
+                selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax().detach().numpy()
         
         return selected_action
+
+    def sample_exploration_rate(self, state: np.ndarray) -> np.ndarray:
+        match_count = 0
+        sample_size = 20
+        action = self.dqn(torch.FloatTensor(state).to(self.device), use_noise=False).argmax().detach().numpy()
+        for _ in range(sample_size):
+            non_noisy_action = self.dqn(torch.FloatTensor(state).to(self.device), use_noise=True).argmax().detach().numpy()
+            if action == non_noisy_action:
+                match_count += 1
+            self.dqn.resample_noise()
+            
+        return 1. - float(match_count / sample_size)
 
     def step(self, state: np.ndarray, action: np.ndarray) -> float:
         """Take an action and return the response of the env."""
@@ -248,6 +258,8 @@ class DQNAgent:
         arm_weights = []
         data = []
         epsilons = []
+        exploration_rates = []
+        mean_exploration_rates = []
         
         state, _ = self.env.reset(seed=self.args.seed)
 
@@ -255,10 +267,19 @@ class DQNAgent:
         for step_id in tqdm(range(1, num_episodes + 1)):
             score = 0
             
-            if args.noisy_net:
-                self.dqn.resample_noise() # line 5
+            # if args.noisy_net:
+            #     self.dqn.resample_noise() # line 5
 
             action = self.select_action(state) # line 6
+
+            if self.args.noisy_net:
+                if step_id % 10 == 0:
+                    exploration_rate = self.sample_exploration_rate(state)
+                    exploration_rates.append(exploration_rate)
+                    mean_exploration_rate = np.mean(exploration_rates[-20:])
+                    mean_exploration_rates.append(mean_exploration_rate)
+                    if self.args.logging: wandb.log({"exploration_rate": mean_exploration_rate})
+
             next_state, reward, info = self.step(state, action) # line 7
 
             data.append([step_id, float(state[0]), action, float(reward)]) # line 8
@@ -270,8 +291,8 @@ class DQNAgent:
             state = next_state
 
             if self.args.logging:
-                wandb.log({"regret": info['regret']})
-            if not args.noisy_net:
+                wandb.log({"regret": info['total_regret']})
+            if not self.args.noisy_net:
                 epsilons.append(self.epsilon)
 
             # Scatterplot background
@@ -287,15 +308,16 @@ class DQNAgent:
                 scores.append(score)
                 if self.args.logging: wandb.log({"score": score})
 
-            if args.noisy_net:
+            if self.args.noisy_net:
                 self.dqn.resample_noise() # line 13
             else:
-                self.epsilon = max(self.epsilon - 2/num_episodes, 0)
+                self.epsilon = max(self.epsilon - 1/num_episodes, 0)
+                # self.epsilon *= 0.997
 
             # if training is ready
             if len(self.memory) >= self.args.batch_size:
                 samples = self.memory.sample_batch() # line 12
-                        
+                
                 loss = self._compute_dqn_loss(samples)
                 losses.append(loss)
                 if self.args.logging: wandb.log({"loss": loss})
@@ -303,8 +325,8 @@ class DQNAgent:
         if self.args.logging:
             wandb.run.summary["mean_regret"] = np.mean(regrets[-100:])
         
-        if self.args.plotting:
-            self._plot(rewards, scores, losses, regrets, arm_weights, np.array(data), epsilons)
+        if not self.is_sweep:
+            self._plot(rewards, scores, losses, regrets, arm_weights, np.array(data), epsilons, exploration_rates, mean_exploration_rates)
 
         self.env.close()
 
@@ -333,7 +355,9 @@ class DQNAgent:
         regrets: List[float],
         arm_weights: List[np.ndarray],
         data: np.ndarray,
-        epsilons: List[float]
+        epsilons: List[float],
+        exploration_rates: List[float],
+        mean_exploration_rates: List[float]
     ):
         """Plot the training progresses."""
         plt.figure(figsize=(17, 5))
@@ -358,9 +382,13 @@ class DQNAgent:
         plt.xlabel('Training Step')
         plt.ylabel('Regret')
         
-        if not args.noisy_net:
+        if not self.args.noisy_net:
             plt.figure(figsize=(6, 6))
             plt.plot(epsilons)
+
+        plt.figure(figsize=(6, 6))
+        plt.plot(mean_exploration_rates, label='Exploration', alpha=0.5)
+        # plt.plot(np.arange(0, len(exploration_rates), 20), mean_exploration_rates, label='Exploration rate (mean of 20)', linewidth=2)
         # ------------------------------------------------------
 
         if self.obs_dim == 1:
@@ -420,10 +448,15 @@ class DQNAgent:
             ax[1].grid(True)
 
             plt.tight_layout()
-        plt.show()
 
-        if self.args.logging:
-            wandb.log({"Reward Scatter": wandb.Image(fig)})
+            if self.args.logging:
+                wandb.log({"Reward Scatter": wandb.Image(fig)})
+        
+        if self.args.plotting:
+            plt.show()
+
+        plt.close("all")
+
 
 def sample_env(args, num_samples=1000):
     """somehow just sampling the reward functions didn't work"""
@@ -446,37 +479,69 @@ def sample_env(args, num_samples=1000):
 
 ####################################################################################################
 
-if __name__ == "__main__":
-    args = tyro.cli(Args)
-    run_name = f"{args.exp_name}__{args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
-    if args.logging:wandb.init(
-        project=args.wandb_project_name,
-        config=vars(args),
+def run(_seed: int):
+    _args = tyro.cli(Args)
+    if _seed is not None:
+        _args.seed = _seed
+    run_name = f"{_args.exp_name}__{_args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
+    if _args.logging:wandb.init(
+        project=_args.wandb_project_name,
+        config=vars(_args),
         name=run_name,
         monitor_gym=True,
         save_code=True,
     )
 
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    np.random.seed(_args.seed)
+    torch.manual_seed(_args.seed)
     if torch.backends.cudnn.enabled:
-        torch.cuda.manual_seed(args.seed)
+        torch.cuda.manual_seed(_args.seed)
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
 
     env = gym.make(
-        args.env_id,
-        arms=args.arms,
-        dynamic_rate=args.dynamic_rate,
-        seed=args.seed,
-        noisy=args.noisy
+        _args.env_id,
+        arms=_args.arms,
+        dynamic_rate=_args.dynamic_rate,
+        seed=_args.seed,
+        noisy=_args.noisy_reward
     )
 
-    agent = DQNAgent(env, args)
+    agent = DQNAgent(env, _args)
 
-    print(f"[ Environment: '{args.env_id}' | Type: {args.noisy_net} | Seed: {args.seed} | Device: {agent.device} ]")
+    print(f"[ Environment: '{_args.env_id}' | Type: {_args.noisy_net} | Seed: {_args.seed} | Device: {agent.device} ]")
 
-    agent.train(args.num_episodes)
+    agent.train(_args.num_episodes)
 
-    if args.logging:
+    if _args.logging:
         wandb.finish()
+
+
+if __name__ == "__main__":
+    run()
+
+####################################################################################################
+
+def wandb_sweep():
+    with wandb.init() as run:
+        config = wandb.config
+
+        new_args = {k: v for k, v in config.items()}
+        _args = Args(**new_args)
+
+        run.name = f"{_args.exp_name}__{_args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
+
+        np.random.seed(_args.seed)
+        torch.manual_seed(_args.seed)
+
+        _env = gym.make(
+            _args.env_id,
+            arms=_args.arms,
+            dynamic_rate=_args.dynamic_rate,
+            seed=_args.seed,
+            noisy=_args.noisy_reward
+        )
+
+        _agent = DQNAgent(_env, _args, is_sweep=True)
+        print(f"[ Environment: '{_args.env_id}' | Seed: {_args.seed} | Device: {_agent.device} ]")
+        _agent.train(_args.num_episodes)

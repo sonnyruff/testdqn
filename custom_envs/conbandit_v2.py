@@ -36,16 +36,6 @@ class ConbanditEnv2(gym.Env):
         """
         Draw new arms
         """
-        # self.offsets = np.random.uniform(self.min_suboptimal_mean, self.max_suboptimal_mean,
-        #                                  size=(1, self.states, self.arms))
-        # self.stds = []
-        # for state in range(self.states):
-        #     optimal_arms = self.rng.choice(range(self.arms), self.optimal_arms, replace=False)
-        #     for arm in optimal_arms:
-        #         self.offsets[0, state, arm] = self.optimal_mean
-        #     self.stds.append([self.optimal_std if arm in optimal_arms else self.suboptimal_std
-        #                       for arm in range(self.arms)])
-
         self.intercepts = self.rng.uniform(-2, 2, self.arms)
         self.slopes = self.rng.uniform(-1, 1, self.arms)
 
@@ -110,8 +100,8 @@ class ConbanditEnv2(gym.Env):
         if self.noisy:
             reward = self.rng.normal(reward, 0.1, 1)[0]
 
-        # Calculate regret before redrawing state and arms!!
         optimal_reward_action, optimal_reward = self.optimal_reward(self.state)
+        # Calculate regret before redrawing state and arms!!
         regret = optimal_reward - reward
         self._total_regret += regret
 

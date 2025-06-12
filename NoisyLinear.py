@@ -60,24 +60,19 @@ class NoisyLinear(nn.Module):
         self.weight_epsilon.copy_(epsilon_out.outer(epsilon_in))
         self.bias_epsilon.copy_(epsilon_out)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, use_noise: bool = True) -> torch.Tensor:
         """Forward method implementation.
         
         We don't use separate statements on train / eval mode.
         It doesn't show remarkable difference of performance.
         """
-        return F.linear(
-            x,
-            self.weight_mu + self.weight_sigma * self.weight_epsilon,
-            self.bias_mu + self.bias_sigma * self.bias_epsilon,
-        )
-    
-    def forward_eval(self, x: torch.Tensor) -> torch.Tensor:
-        return F.linear(
-            x,
-            self.weight_mu,
-            self.bias_mu,
-        )
+        if use_noise:
+            weight = self.weight_mu + self.weight_sigma * self.weight_epsilon
+            bias = self.bias_mu + self.bias_sigma * self.bias_epsilon
+        else:
+            weight = self.weight_mu
+            bias = self.bias_mu
+        return F.linear(x, weight, bias)
     
     def get_noise(self):
         return {
