@@ -77,11 +77,9 @@ class NNBanditEnv(gym.Env):
 
         self.state = self.rng.normal(0, 1, self._dims)
         
-        # self.pulls += 1
-        # if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
-            # if self.seed is not None:
-            #     self.seed += 1
-            # self.__draw_arms()
+        self.pulls += 1
+        if self.dynamic_rate is not None and self.pulls % self.dynamic_rate == 0:
+            self.net.shift_weights_and_biases(0.1)
 
         return self.state, reward, False, False, {'regret': regret, 'total_regret': self._total_regret}
     
