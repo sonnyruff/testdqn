@@ -67,7 +67,7 @@ class Args:
 
     noisy_layer_distr_type: str = "normal" # or uniform
     """the distribution of the noisy layer"""
-    noisy_layer_init_std: float = 0.5
+    noisy_layer_init_std: float = 0.2
     """the initial standard deviation of the noisy layer"""
 
     hidden_layer_size: int = 40

@@ -69,12 +69,22 @@ config_4 = {
         # "noisy_layer_distr_type": {"values": ["normal", "uniform"]},
         # "noisy_layer_init_std": {"values": [0.01, 0.5, 1.0, 2.0]},
         # "noisy_layer_init_std": {"values": np.linspace(0.01, 2, 6).tolist()},
-        "noisy_layer_init_std": {"values": np.arange(0.05, 0.4, 0.05).tolist()},
+        # "noisy_layer_init_std": {"values": np.arange(0.05, 0.4, 0.05).tolist()},
+    }
+}
+batch = {
+    "method": "grid",
+    "metric": {"name": "mean_regret", "goal": "minimize"},	
+    "parameters": {
+        "seed": {"distribution": "int_uniform", "min": 0, "max": 50},
+        "wandb_project_name": {"value": project_name},
+        "noisy_net": {"values": [True, False]},
+        "env_id": {"values": "ContextualBandit-v2"},
     }
 }
 
 
-sweep_id = wandb.sweep(sweep=config_4, project=project_name)
+sweep_id = wandb.sweep(sweep=batch, project=project_name)
 # wandb.agent(sweep_id, function=wandb_sweep, count=50)
 wandb.agent(sweep_id, function=wandb_sweep)
 
