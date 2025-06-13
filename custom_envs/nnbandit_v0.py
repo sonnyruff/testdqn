@@ -24,7 +24,7 @@ class NNBanditEnv(gym.Env):
                  seed: int | None = None,
                  noisy: bool = False):
 
-        self._dims = 100
+        self._dims = 10
         self.arms = arms
         self.dynamic_rate = dynamic_rate
         self.initial_seed = seed

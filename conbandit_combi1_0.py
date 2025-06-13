@@ -49,7 +49,7 @@ class Args:
     """the name of this experiment"""
     seed: int = np.random.randint(0, 10000)
     """seed of the experiment"""
-    wandb_project_name: str = "NoisyNeuralNet-v3"
+    wandb_project_name: str = "NoisyNeuralNet-v6"
     """the wandb's project name"""
     plotting: bool = False
     """whether to plot the results"""
@@ -323,7 +323,7 @@ class DQNAgent:
                 if self.args.logging: wandb.log({"loss": loss})
                 
         if self.args.logging:
-            wandb.run.summary["mean_regret"] = np.mean(regrets[-100:])
+            wandb.run.summary["mean_regret"] = np.mean(regrets)
         
         if not self.is_sweep:
             self._plot(rewards, scores, losses, regrets, arm_weights, np.array(data), epsilons, exploration_rates, mean_exploration_rates)
@@ -518,7 +518,7 @@ def run(_seed: int):
 
 
 if __name__ == "__main__":
-    run()
+    run(None)
 
 ####################################################################################################
 
