@@ -62,7 +62,7 @@ class Args:
     """the number of episodes to run"""
     memory_size: int = 1000
     """the replay memory buffer size"""
-    batch_size: int = 50
+    batch_size: int = 100
     """the batch size of sample from the reply memory"""
 
     noisy_layer_distr_type: str = "normal" # or uniform
@@ -70,7 +70,7 @@ class Args:
     noisy_layer_init_std: float = 0.5
     """the initial standard deviation of the noisy layer"""
 
-    hidden_layer_size: int = 10
+    hidden_layer_size: int = 40
     noisy_output_layer: bool = True
     """whether to have to last layer of the network be a NoisyLinear layer"""
 
