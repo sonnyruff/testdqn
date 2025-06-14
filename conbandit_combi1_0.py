@@ -58,7 +58,7 @@ class Args:
 
     env_id: str = "ContextualBandit-v2"
     """the id of the environment"""
-    num_episodes: int = 2000
+    num_episodes: int = 500
     """the number of episodes to run"""
     memory_size: int = 1000
     """the replay memory buffer size"""
