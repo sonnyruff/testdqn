@@ -61,6 +61,7 @@ config_4 = {
     "parameters": {
         # "seed": {"distribution": "int_uniform", "min": 0, "max": 1000},
         "seed": {"values": np.arange(6).tolist()},
+        "seed": {"values": np.arange(6).tolist()},
         "wandb_project_name": {"value": project_name},
         "noisy_net": {"value": True},
         "env_id": {"values": ["ContextualBandit-v2", "MNISTBandit-v0", "NNBandit-v0"]},
@@ -69,7 +70,7 @@ config_4 = {
         # "noisy_layer_distr_type": {"values": ["normal", "uniform"]},
         # "noisy_layer_init_std": {"values": [0.01, 0.5, 1.0, 2.0]},
         # "noisy_layer_init_std": {"values": np.linspace(0.01, 2, 6).tolist()},
-        "noisy_layer_init_std": {"values": np.arange(0.05, 0.65, 0.05).tolist()},
+        "noisy_layer_init_std": {"values": np.arange(0.05, 0.55, 0.05).tolist()},
     }
 }
 batch = {
