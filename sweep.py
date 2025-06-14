@@ -72,9 +72,19 @@ config_4 = {
         "noisy_layer_init_std": {"values": np.arange(0.05, 0.65, 0.05).tolist()},
     }
 }
+batch = {
+    "method": "random",
+    "metric": {"name": "mean_regret", "goal": "minimize"},
+    "parameters": {
+        "seed": {"distribution": "int_uniform", "min": 0, "max": 1000},
+        "wandb_project_name": {"value": project_name},
+        "noisy_net": {"values": [True, False]},
+        "env_id": {"values": ["ContextualBandit-v2", "MNISTBandit-v0", "NNBandit-v0"]},
+    }
+}
 
 
-sweep_id = wandb.sweep(sweep=config_4, project=project_name)
-# wandb.agent(sweep_id, function=wandb_sweep, count=50)
-wandb.agent(sweep_id, function=wandb_sweep)
+sweep_id = wandb.sweep(sweep=batch, project=project_name)
+wandb.agent(sweep_id, function=wandb_sweep, count=100)
+# wandb.agent(sweep_id, function=wandb_sweep)
 

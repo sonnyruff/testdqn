@@ -58,7 +58,7 @@ class Args:
 
     env_id: str = "ContextualBandit-v2"
     """the id of the environment"""
-    num_episodes: int = 500
+    num_episodes: int = 2000
     """the number of episodes to run"""
     memory_size: int = 1000
     """the replay memory buffer size"""
@@ -67,7 +67,7 @@ class Args:
 
     noisy_layer_distr_type: str = "normal" # or uniform
     """the distribution of the noisy layer"""
-    noisy_layer_init_std: float = 0.5
+    noisy_layer_init_std: float = 0.2
     """the initial standard deviation of the noisy layer"""
 
     hidden_layer_size: int = 40
@@ -182,7 +182,12 @@ class DQNAgent:
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.n
 
-        self.epsilon = 1
+        if args.env_id == "ContextualBandit-v2":
+            self.epsilon = 0.4
+        elif args.env_id == "MNISTBandit-v0":
+            self.epsilon = 0.4
+        elif args.env_id == "NNBandit-v0":
+            self.epsilon = 0.4
         
         self.env = env
         self.args = args
@@ -278,7 +283,12 @@ class DQNAgent:
                     exploration_rates.append(exploration_rate)
                     mean_exploration_rate = np.mean(exploration_rates[-20:])
                     mean_exploration_rates.append(mean_exploration_rate)
-                    if self.args.logging: wandb.log({"exploration_rate": mean_exploration_rate})
+                    if self.args.logging: wandb.log({"exploration_rate": mean_exploration_rate}, step=step_id)
+            else:
+                # TODO rework
+                exploration_rate = self.epsilon
+                mean_exploration_rates.append(exploration_rate)
+                if self.args.logging: wandb.log({"exploration_rate": exploration_rate}, step=step_id)
 
             next_state, reward, info = self.step(state, action) # line 7
 
@@ -291,7 +301,7 @@ class DQNAgent:
             state = next_state
 
             if self.args.logging:
-                wandb.log({"regret": info['total_regret']})
+                wandb.log({"regret": info['total_regret']}, step=step_id)
             if not self.args.noisy_net:
                 epsilons.append(self.epsilon)
 
@@ -306,13 +316,24 @@ class DQNAgent:
             if step_id % 50 == 0:
                 score += np.mean(rewards[-50:])
                 scores.append(score)
-                if self.args.logging: wandb.log({"score": score})
+                if self.args.logging: wandb.log({"score": score}, step=step_id)
 
             if self.args.noisy_net:
                 self.dqn.resample_noise() # line 13
             else:
-                self.epsilon = max(self.epsilon - 1/num_episodes, 0)
-                # self.epsilon *= 0.997
+                if self.args.env_id == "ContextualBandit-v2":
+                    if step_id >= 100:
+                        self.epsilon *= 0.997
+                elif self.args.env_id == "MNISTBandit-v0":
+                    if step_id > 150:
+                        self.epsilon -= .4/310
+                elif self.args.env_id == "NNBandit-v0":
+                    if step_id <= 300:
+                        self.epsilon -= 0.0015
+                    else:
+                        self.epsilon -= 1/34000
+                self.epsilon = max(self.epsilon, 0.)
+                # self.epsilon = max(self.epsilon - 1/num_episodes, 0)
 
             # if training is ready
             if len(self.memory) >= self.args.batch_size:
@@ -320,7 +341,7 @@ class DQNAgent:
                 
                 loss = self._compute_dqn_loss(samples)
                 losses.append(loss)
-                if self.args.logging: wandb.log({"loss": loss})
+                if self.args.logging: wandb.log({"loss": loss}, step=step_id)
                 
         if self.args.logging:
             wandb.run.summary["mean_regret"] = np.mean(regrets)
