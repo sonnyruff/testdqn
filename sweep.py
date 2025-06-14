@@ -60,7 +60,7 @@ config_4 = {
     "metric": {"name": "mean_regret", "goal": "minimize"},
     "parameters": {
         # "seed": {"distribution": "int_uniform", "min": 0, "max": 1000},
-        "seed": {"values": np.arange(4).tolist()},	
+        "seed": {"values": np.arange(6).tolist()},
         "wandb_project_name": {"value": project_name},
         "noisy_net": {"value": True},
         "env_id": {"values": ["ContextualBandit-v2", "MNISTBandit-v0", "NNBandit-v0"]},
@@ -69,22 +69,22 @@ config_4 = {
         # "noisy_layer_distr_type": {"values": ["normal", "uniform"]},
         # "noisy_layer_init_std": {"values": [0.01, 0.5, 1.0, 2.0]},
         # "noisy_layer_init_std": {"values": np.linspace(0.01, 2, 6).tolist()},
-        # "noisy_layer_init_std": {"values": np.arange(0.05, 0.4, 0.05).tolist()},
+        "noisy_layer_init_std": {"values": np.arange(0.05, 0.65, 0.05).tolist()},
     }
 }
 batch = {
-    "method": "grid",
-    "metric": {"name": "mean_regret", "goal": "minimize"},	
+    "method": "random",
+    "metric": {"name": "mean_regret", "goal": "minimize"},
     "parameters": {
-        "seed": {"distribution": "int_uniform", "min": 0, "max": 50},
+        "seed": {"distribution": "int_uniform", "min": 0, "max": 1000},
         "wandb_project_name": {"value": project_name},
         "noisy_net": {"values": [True, False]},
-        "env_id": {"values": "ContextualBandit-v2"},
+        "env_id": {"values": ["ContextualBandit-v2", "MNISTBandit-v0", "NNBandit-v0"]},
     }
 }
 
 
 sweep_id = wandb.sweep(sweep=batch, project=project_name)
-# wandb.agent(sweep_id, function=wandb_sweep, count=50)
-wandb.agent(sweep_id, function=wandb_sweep)
+wandb.agent(sweep_id, function=wandb_sweep, count=100)
+# wandb.agent(sweep_id, function=wandb_sweep)
 

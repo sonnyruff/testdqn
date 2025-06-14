@@ -6,3 +6,5 @@ __pycache__
 
 buffalo-gym
 gym-bandit-environments
+
+.ipynb_checkpoints
