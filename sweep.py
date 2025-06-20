@@ -12,33 +12,11 @@ config_random = {
     "parameters": {
         "seed": {"distribution": "int_uniform", "min": 0, "max": 1000},
         "wandb_project_name": {"value": project_name},
-<<<<<<< HEAD
-=======
-        "noisy_net": {"values": [True, False]},
-        "env_id": {"values": ["ContextualBandit-v2", "MNISTBandit-v0", "NNBandit-v0"]},
-        "memory_size": {"values": [500, 1000, 1500, 2000]},
-        "batch_size": {"values": [50, 100, 150, 200, 300, 500]},
-        "noisy_layer_distr_type": {"values": ["normal", "uniform"]},
-        "noisy_layer_init_std": {"distribution": "log_uniform_values", "min": 0.1, "max": 5.0},
-        "hidden_layer_size": {"values": [8, 16, 20, 24, 40, 80, 160, 300, 500]},
-    }
-}
-config_4 = {
-    # "method": "random",
-    "method": "grid",
-    "metric": {"name": "mean_regret", "goal": "minimize"},
-    "parameters": {
-        # "seed": {"distribution": "int_uniform", "min": 0, "max": 1000},
-        "seed": {"values": np.arange(6).tolist()},
-        "seed": {"values": np.arange(6).tolist()},
-        "wandb_project_name": {"value": project_name},
->>>>>>> feb5d4f1b69307be84c7c75394027cba49791709
         "noisy_net": {"value": True},
         "env_id": {"values": ["ContextualBandit-v2", "MNISTBandit-v0", "NNBandit-v0"]},
         # "memory_size": {"values": [500, 1000, 1500, 2000]},
         # "batch_size": {"values": [50, 100, 150, 200, 300, 500]},
         # "noisy_layer_distr_type": {"values": ["normal", "uniform"]},
-<<<<<<< HEAD
         "noisy_layer_init_std": {"values": np.arange(0.55, 1.05, 0.05).tolist()},
     }
 }
@@ -65,11 +43,6 @@ config_grid_nonstationary = {
         "memory_size": {"values": [500, 1000, 1500, 2000]},
         "batch_size": {"values": [2, 5, 10, 20, 30, 50, 100, 200]},
         "dynamic_rate": {"values": [200, 1000]}
-=======
-        # "noisy_layer_init_std": {"values": [0.01, 0.5, 1.0, 2.0]},
-        # "noisy_layer_init_std": {"values": np.linspace(0.01, 2, 6).tolist()},
-        "noisy_layer_init_std": {"values": np.arange(0.05, 0.55, 0.05).tolist()},
->>>>>>> feb5d4f1b69307be84c7c75394027cba49791709
     }
 }
 batch = {
