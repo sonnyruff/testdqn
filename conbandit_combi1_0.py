@@ -67,7 +67,7 @@ class Args:
 
     noisy_layer_distr_type: str = "normal" # or uniform
     """the distribution of the noisy layer"""
-    noisy_layer_init_std: float = 0.2
+    noisy_layer_init_std: float = 0.4
     """the initial standard deviation of the noisy layer"""
 
     hidden_layer_size: int = 40
@@ -182,12 +182,27 @@ class DQNAgent:
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.n
 
+        # non-stationary dyn200
+        # if args.env_id == "ContextualBandit-v2":
+        #     self.epsilon = 0.5
+        # elif args.env_id == "MNISTBandit-v0":
+        #     self.epsilon = 0.4
+        # elif args.env_id == "NNBandit-v0":
+        #     self.epsilon = 0.5
+        # non-stationary dyn1000
         if args.env_id == "ContextualBandit-v2":
-            self.epsilon = 0.4
+            self.epsilon = 0.6
         elif args.env_id == "MNISTBandit-v0":
             self.epsilon = 0.4
         elif args.env_id == "NNBandit-v0":
-            self.epsilon = 0.4
+            self.epsilon = 0.6
+        # non-stationary
+        # if args.env_id == "ContextualBandit-v2":
+        #     self.epsilon = 0.38
+        # elif args.env_id == "MNISTBandit-v0":
+        #     self.epsilon = 0.4
+        # elif args.env_id == "NNBandit-v0":
+        #     self.epsilon = 0.35
         
         self.env = env
         self.args = args
@@ -321,17 +336,32 @@ class DQNAgent:
             if self.args.noisy_net:
                 self.dqn.resample_noise() # line 13
             else:
+                # non-stationary dyn200
+                # if self.args.env_id == "ContextualBandit-v2":
+                #     self.epsilon *= 0.998
+                # elif self.args.env_id == "MNISTBandit-v0":
+                #     if step_id > 150:
+                #         self.epsilon -= .4/200
+                # elif self.args.env_id == "NNBandit-v0":
+                #     self.epsilon *= 0.996
+                # non-stationary dyn1000
                 if self.args.env_id == "ContextualBandit-v2":
-                    if step_id >= 100:
-                        self.epsilon *= 0.997
+                    self.epsilon *= 0.9965
                 elif self.args.env_id == "MNISTBandit-v0":
                     if step_id > 150:
-                        self.epsilon -= .4/310
+                        self.epsilon -= .4/200
                 elif self.args.env_id == "NNBandit-v0":
-                    if step_id <= 300:
-                        self.epsilon -= 0.0015
-                    else:
-                        self.epsilon -= 1/34000
+                    self.epsilon *= 0.9965
+                # stationary
+                # if self.args.env_id == "ContextualBandit-v2":
+                #     if step_id >= 100:
+                #         self.epsilon *= 0.997
+                # elif self.args.env_id == "MNISTBandit-v0":
+                #     if step_id > 150:
+                #         self.epsilon -= .4/200
+                # elif self.args.env_id == "NNBandit-v0":
+                #     if step_id >= 130:
+                #         self.epsilon *= 0.995
                 self.epsilon = max(self.epsilon, 0.)
                 # self.epsilon = max(self.epsilon - 1/num_episodes, 0)
 
