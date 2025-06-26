@@ -193,7 +193,7 @@ class DQNAgent:
         if args.env_id == "ContextualBandit-v2":
             self.epsilon = 0.6
         elif args.env_id == "MNISTBandit-v0":
-            self.epsilon = 0.4
+            self.epsilon = 1
         elif args.env_id == "NNBandit-v0":
             self.epsilon = 0.6
         # non-stationary
@@ -227,6 +227,8 @@ class DQNAgent:
                            self.action_dim
                         ).to(self.device)
         
+        print(self.dqn)
+
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
         
@@ -237,12 +239,14 @@ class DQNAgent:
     def select_action(self, state: np.ndarray) -> np.ndarray:
         """Select an action from the input state."""
         if self.args.noisy_net:
-            selected_action = self.dqn(torch.FloatTensor(state).to(self.device), use_noise=True).argmax().detach().numpy()
+            _predictions = self.dqn(torch.FloatTensor(state).to(self.device), use_noise=True)
+            selected_action = _predictions.argmax().detach().numpy()
         else:
             if np.random.rand() < self.epsilon:
                 selected_action = self.env.action_space.sample()
             else:
-                selected_action = self.dqn(torch.FloatTensor(state).to(self.device)).argmax().detach().numpy()
+                _predictions = self.dqn(torch.FloatTensor(state).to(self.device))
+                selected_action = _predictions.argmax().detach().numpy()
         
         return selected_action
 
@@ -261,7 +265,7 @@ class DQNAgent:
     def step(self, state: np.ndarray, action: np.ndarray) -> float:
         """Take an action and return the response of the env."""
         next_state, reward, _, _, info = self.env.step(action)
-        
+
         if not self.is_test:
             self.memory.store(state, action, reward)
     
@@ -280,12 +284,13 @@ class DQNAgent:
         epsilons = []
         exploration_rates = []
         mean_exploration_rates = []
+        visited_states = set()
         
         state, _ = self.env.reset(seed=self.args.seed)
 
-        # Double loop isn't necessary
         for step_id in tqdm(range(1, num_episodes + 1)):
             score = 0
+            visited_states.add(tuple(state.tolist()))
             
             # if args.noisy_net:
             #     self.dqn.resample_noise() # line 5
@@ -348,8 +353,7 @@ class DQNAgent:
                 if self.args.env_id == "ContextualBandit-v2":
                     self.epsilon *= 0.9965
                 elif self.args.env_id == "MNISTBandit-v0":
-                    if step_id > 150:
-                        self.epsilon -= .4/200
+                    self.epsilon = max(self.epsilon - 1/num_episodes, 0)
                 elif self.args.env_id == "NNBandit-v0":
                     self.epsilon *= 0.9965
                 # stationary
@@ -378,7 +382,8 @@ class DQNAgent:
         
         if not self.is_sweep:
             self._plot(rewards, scores, losses, regrets, arm_weights, np.array(data), epsilons, exploration_rates, mean_exploration_rates)
-
+        
+        print(f"Unique states visited during training: {len(visited_states)}")
         self.env.close()
 
     def _compute_dqn_loss(self, samples: Dict[str, np.ndarray]) -> torch.Tensor:
@@ -530,10 +535,8 @@ def sample_env(args, num_samples=1000):
 
 ####################################################################################################
 
-def run(_seed: int):
+if __name__ == "__main__":
     _args = tyro.cli(Args)
-    if _seed is not None:
-        _args.seed = _seed
     run_name = f"{_args.exp_name}__{_args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
     if _args.logging:wandb.init(
         project=_args.wandb_project_name,
@@ -566,10 +569,6 @@ def run(_seed: int):
 
     if _args.logging:
         wandb.finish()
-
-
-if __name__ == "__main__":
-    run(None)
 
 ####################################################################################################
 

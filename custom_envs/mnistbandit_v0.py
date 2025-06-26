@@ -57,6 +57,7 @@ class MNISTBanditEnv(gym.Env):
         (images, labels) = load_mnist()
 
         num_data = len(labels)
+        print(f"Loaded {num_data} training examples.")
 
         self._num_data = int(num_data)
         self._image_shape = images.shape[1:]
@@ -80,7 +81,6 @@ class MNISTBanditEnv(gym.Env):
         idx = self._rng.randint(self._num_data)
         image = self._images[idx].astype(np.float32) / 255
         self._correct_label = self._labels[idx]
-        # return image, {}
         return image.flatten(), {}
 
     def step(self, action: int) -> tuple[ObsType, SupportsFloat, bool, bool, dict[str, Any]]:
@@ -89,8 +89,12 @@ class MNISTBanditEnv(gym.Env):
         reward = 1. if correct else -1.
         regret = self._optimal_return - reward
         self._total_regret += regret
-        observation = np.zeros(shape=np.prod(self._image_shape), dtype=np.float32)
-        return observation, reward, False, False, {'regret': regret, 'total_regret': self._total_regret}
+
+        idx = self._rng.randint(self._num_data)
+        image = self._images[idx].astype(np.float32) / 255
+        self._correct_label = self._labels[idx]
+
+        return image.flatten(), reward, False, False, {'regret': regret, 'total_regret': self._total_regret}
 
 
 def _download(url, filename, directory="/tmp/mnist"):

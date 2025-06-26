@@ -3,8 +3,11 @@ videos
 wandb
 __pycache__
 .venv
+.venv2
 
 buffalo-gym
 gym-bandit-environments
 
 .ipynb_checkpoints
+
+plots/wandb_data
