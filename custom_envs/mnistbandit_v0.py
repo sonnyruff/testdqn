@@ -69,6 +69,8 @@ class MNISTBanditEnv(gym.Env):
 
         self._total_regret = 0.
         self._optimal_return = 1.
+
+        self.noisy = noisy
         
         self.action_space = gym.spaces.Discrete(10)
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=(np.prod(self._image_shape),), dtype=np.float32)

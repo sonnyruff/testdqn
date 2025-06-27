@@ -252,11 +252,11 @@ class DQNAgent:
 
     def sample_exploration_rate(self, state: np.ndarray) -> np.ndarray:
         match_count = 0
-        sample_size = 20
-        action = self.dqn(torch.FloatTensor(state).to(self.device), use_noise=False).argmax().detach().numpy()
+        sample_size = 10
+        non_noisy_action = self.dqn(torch.FloatTensor(state).to(self.device), use_noise=False).argmax().detach().numpy()
         for _ in range(sample_size):
-            non_noisy_action = self.dqn(torch.FloatTensor(state).to(self.device), use_noise=True).argmax().detach().numpy()
-            if action == non_noisy_action:
+            noisy_action = self.dqn(torch.FloatTensor(state).to(self.device), use_noise=True).argmax().detach().numpy()
+            if non_noisy_action == noisy_action:
                 match_count += 1
             self.dqn.resample_noise()
             
@@ -297,19 +297,6 @@ class DQNAgent:
 
             action = self.select_action(state) # line 6
 
-            if self.args.noisy_net:
-                if step_id % 10 == 0:
-                    exploration_rate = self.sample_exploration_rate(state)
-                    exploration_rates.append(exploration_rate)
-                    mean_exploration_rate = np.mean(exploration_rates[-20:])
-                    mean_exploration_rates.append(mean_exploration_rate)
-                    if self.args.logging: wandb.log({"exploration_rate": mean_exploration_rate}, step=step_id)
-            else:
-                # TODO rework
-                exploration_rate = self.epsilon
-                mean_exploration_rates.append(exploration_rate)
-                if self.args.logging: wandb.log({"exploration_rate": exploration_rate}, step=step_id)
-
             next_state, reward, info = self.step(state, action) # line 7
 
             data.append([step_id, float(state[0]), action, float(reward)]) # line 8
@@ -333,10 +320,33 @@ class DQNAgent:
                 best_actions = np.argmax(q_values, axis=1)
                 arm_weights.append((step_id, best_actions))
 
-            if step_id % 50 == 0:
+            if step_id % 1 == 0:
                 score += np.mean(rewards[-50:])
                 scores.append(score)
-                if self.args.logging: wandb.log({"score": score}, step=step_id)
+                if self.args.logging: wandb.log({"reward": reward}, step=step_id)
+
+            # if training is ready
+            if len(self.memory) >= self.args.batch_size:
+                samples = self.memory.sample_batch() # line 12
+                
+                loss = self._compute_dqn_loss(samples)
+                losses.append(loss)
+                if self.args.logging: wandb.log({"loss": loss}, step=step_id)
+            
+            if self.args.noisy_net:
+                if step_id % 1 == 0:
+                    exploration_rate = self.sample_exploration_rate(state)
+                    exploration_rates.append(exploration_rate)
+                    mean_exploration_rate = np.mean(exploration_rates[-2:])
+                    mean_exploration_rates.append(mean_exploration_rate)
+                    if self.args.logging:
+                        wandb.log({"exploration_rate": exploration_rate}, step=step_id)
+                        wandb.log({"state": state}, step=step_id)
+            else:
+                # TODO rework
+                exploration_rate = self.epsilon
+                mean_exploration_rates.append(exploration_rate)
+                if self.args.logging: wandb.log({"exploration_rate": exploration_rate}, step=step_id)
 
             if self.args.noisy_net:
                 self.dqn.resample_noise() # line 13
@@ -368,17 +378,10 @@ class DQNAgent:
                 #         self.epsilon *= 0.995
                 self.epsilon = max(self.epsilon, 0.)
                 # self.epsilon = max(self.epsilon - 1/num_episodes, 0)
-
-            # if training is ready
-            if len(self.memory) >= self.args.batch_size:
-                samples = self.memory.sample_batch() # line 12
-                
-                loss = self._compute_dqn_loss(samples)
-                losses.append(loss)
-                if self.args.logging: wandb.log({"loss": loss}, step=step_id)
                 
         if self.args.logging:
-            wandb.run.summary["mean_regret"] = np.mean(regrets)
+            # wandb.run.summary["mean_regret"] = np.mean(regrets)
+            wandb.run.summary["regret"] = regrets[len(regrets)-1]
         
         if not self.is_sweep:
             self._plot(rewards, scores, losses, regrets, arm_weights, np.array(data), epsilons, exploration_rates, mean_exploration_rates)
@@ -443,7 +446,7 @@ class DQNAgent:
             plt.plot(epsilons)
 
         plt.figure(figsize=(6, 6))
-        plt.plot(mean_exploration_rates, label='Exploration', alpha=0.5)
+        plt.plot(exploration_rates, label='Exploration', alpha=0.5)
         # plt.plot(np.arange(0, len(exploration_rates), 20), mean_exploration_rates, label='Exploration rate (mean of 20)', linewidth=2)
         # ------------------------------------------------------
 
