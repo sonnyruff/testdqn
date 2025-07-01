@@ -49,7 +49,7 @@ class Args:
     """the name of this experiment"""
     seed: int = np.random.randint(0, 10000)
     """seed of the experiment"""
-    wandb_project_name: str = "NoisyNeuralNet-v6"
+    wandb_project_name: str = "NoisyNeuralNet-v7"
     """the wandb's project name"""
     plotting: bool = False
     """whether to plot the results"""
@@ -62,16 +62,16 @@ class Args:
     """the number of episodes to run"""
     memory_size: int = 1000
     """the replay memory buffer size"""
-    batch_size: int = 100
+    batch_size: int = 50
     """the batch size of sample from the reply memory"""
 
-    noisy_layer_distr_type: str = "normal" # or uniform
+    noisy_layer_distr_type: str = "uniform" # or normal
     """the distribution of the noisy layer"""
     noisy_layer_init_std: float = 0.4
     """the initial standard deviation of the noisy layer"""
 
     hidden_layer_size: int = 40
-    noisy_output_layer: bool = True
+    noisy_output_layer: bool = False
     """whether to have to last layer of the network be a NoisyLinear layer"""
 
     arms: int = 10
@@ -182,27 +182,13 @@ class DQNAgent:
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.n
 
-        # non-stationary dyn200
+        self.epsilon = 1
         # if args.env_id == "ContextualBandit-v2":
-        #     self.epsilon = 0.5
+        #     self.epsilon = 0.6
         # elif args.env_id == "MNISTBandit-v0":
-        #     self.epsilon = 0.4
+        #     self.epsilon = 1
         # elif args.env_id == "NNBandit-v0":
-        #     self.epsilon = 0.5
-        # non-stationary dyn1000
-        if args.env_id == "ContextualBandit-v2":
-            self.epsilon = 0.6
-        elif args.env_id == "MNISTBandit-v0":
-            self.epsilon = 1
-        elif args.env_id == "NNBandit-v0":
-            self.epsilon = 0.6
-        # non-stationary
-        # if args.env_id == "ContextualBandit-v2":
-        #     self.epsilon = 0.38
-        # elif args.env_id == "MNISTBandit-v0":
-        #     self.epsilon = 0.4
-        # elif args.env_id == "NNBandit-v0":
-        #     self.epsilon = 0.35
+        #     self.epsilon = 0.6
         
         self.env = env
         self.args = args
@@ -360,12 +346,12 @@ class DQNAgent:
                 # elif self.args.env_id == "NNBandit-v0":
                 #     self.epsilon *= 0.996
                 # non-stationary dyn1000
-                if self.args.env_id == "ContextualBandit-v2":
-                    self.epsilon *= 0.9965
-                elif self.args.env_id == "MNISTBandit-v0":
-                    self.epsilon = max(self.epsilon - 1/num_episodes, 0)
-                elif self.args.env_id == "NNBandit-v0":
-                    self.epsilon *= 0.9965
+                # if self.args.env_id == "ContextualBandit-v2":
+                #     self.epsilon *= 0.9965
+                # elif self.args.env_id == "MNISTBandit-v0":
+                #     self.epsilon = max(self.epsilon - 1/num_episodes, 0)
+                # elif self.args.env_id == "NNBandit-v0":
+                #     self.epsilon *= 0.9965
                 # stationary
                 # if self.args.env_id == "ContextualBandit-v2":
                 #     if step_id >= 100:
@@ -376,8 +362,8 @@ class DQNAgent:
                 # elif self.args.env_id == "NNBandit-v0":
                 #     if step_id >= 130:
                 #         self.epsilon *= 0.995
-                self.epsilon = max(self.epsilon, 0.)
-                # self.epsilon = max(self.epsilon - 1/num_episodes, 0)
+                # self.epsilon = max(self.epsilon, 0.)
+                self.epsilon = max(self.epsilon - 1/num_episodes, 0)
                 
         if self.args.logging:
             # wandb.run.summary["mean_regret"] = np.mean(regrets)
@@ -424,7 +410,7 @@ class DQNAgent:
         plt.subplot(131)
         plt.title('Rewards and Scores')
         plt.plot(rewards, label='Reward', alpha=0.5)
-        plt.plot(np.arange(0, len(rewards), 50), scores, label='Score (mean of 50)', linewidth=2)
+        # plt.plot(np.arange(0, len(rewards), 50), scores, label='Score (mean of 50)', linewidth=2)
         plt.xlabel('Training Step')
         plt.ylabel('Value')
         plt.legend()
@@ -445,7 +431,7 @@ class DQNAgent:
             plt.figure(figsize=(6, 6))
             plt.plot(epsilons)
 
-        plt.figure(figsize=(6, 6))
+        plt.figure(figsize=(10, 5))
         plt.plot(exploration_rates, label='Exploration', alpha=0.5)
         # plt.plot(np.arange(0, len(exploration_rates), 20), mean_exploration_rates, label='Exploration rate (mean of 20)', linewidth=2)
         # ------------------------------------------------------
