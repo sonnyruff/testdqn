@@ -67,7 +67,7 @@ class Args:
 
     noisy_layer_distr_type: str = "uniform" # or normal
     """the distribution of the noisy layer"""
-    noisy_layer_init_std: float = 0.4
+    noisy_layer_init_std: float = 0.
     """the initial standard deviation of the noisy layer"""
 
     hidden_layer_size: int = 40
@@ -84,6 +84,8 @@ class Args:
 class NoisyNetwork(nn.Module):
     def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, distr_type: str, init_std: float, noisy_output_layer: bool):
         super().__init__()
+
+        print(init_std)
 
         self.noisy_output_layer = noisy_output_layer
 
@@ -181,14 +183,6 @@ class DQNAgent:
         """
         self.obs_dim = env.observation_space.shape[0]
         self.action_dim = env.action_space.n
-
-        self.epsilon = 1
-        # if args.env_id == "ContextualBandit-v2":
-        #     self.epsilon = 0.6
-        # elif args.env_id == "MNISTBandit-v0":
-        #     self.epsilon = 1
-        # elif args.env_id == "NNBandit-v0":
-        #     self.epsilon = 0.6
         
         self.env = env
         self.args = args
@@ -198,6 +192,21 @@ class DQNAgent:
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
+
+        self.epsilon = 1
+        match args.env_id:
+            case "ContextualBandit-v2":
+                self.args.noisy_layer_init_std = 0.7
+                self.args.hidden_layer_size = 40
+                self.epsilon = 0.6
+            case "MNISTBandit-v0":
+                self.args.noisy_layer_init_std = 0.2
+                self.args.hidden_layer_size = 100
+                self.epsilon = 1
+            case "NNBandit-v0":
+                self.args.noisy_layer_init_std = 0.4
+                self.args.hidden_layer_size = 24
+                self.epsilon = 0.6
 
         if self.args.noisy_net:
             self.dqn = NoisyNetwork(self.obs_dim,
