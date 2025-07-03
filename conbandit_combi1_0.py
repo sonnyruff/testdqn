@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
 import gymnasium as gym
+import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -193,20 +194,33 @@ class DQNAgent:
             "cuda" if torch.cuda.is_available() else "cpu"
         )
 
-        self.epsilon = 1
         match args.env_id:
             case "ContextualBandit-v2":
                 self.args.noisy_layer_init_std = 0.7
                 self.args.hidden_layer_size = 40
-                self.epsilon = 0.6
+                match args.dynamic_rate:
+                    case None:
+                        self.epsilon = 0.218
+                    case 200:
+                        self.epsilon = 0.218
+                    case 1000:
+                        self.epsilon = 0.218
             case "MNISTBandit-v0":
-                self.args.noisy_layer_init_std = 0.2
+                self.args.noisy_layer_init_std = 0.5 # DON'T FORGET TO REMOVE THIS
                 self.args.hidden_layer_size = 100
                 self.epsilon = 1
             case "NNBandit-v0":
                 self.args.noisy_layer_init_std = 0.4
                 self.args.hidden_layer_size = 24
-                self.epsilon = 0.6
+                match args.dynamic_rate:
+                    case None:
+                        self.epsilon = 0.219
+                    case 200:
+                        self.epsilon = 0.219
+                    case 1000:
+                        self.epsilon = 0.219
+
+        print(self.args.noisy_layer_init_std)
 
         if self.args.noisy_net:
             self.dqn = NoisyNetwork(self.obs_dim,
@@ -222,8 +236,6 @@ class DQNAgent:
                            self.action_dim
                         ).to(self.device)
         
-        print(self.dqn)
-
         # optimizer
         self.optimizer = optim.Adam(self.dqn.parameters())
         
@@ -372,7 +384,28 @@ class DQNAgent:
                 #     if step_id >= 130:
                 #         self.epsilon *= 0.995
                 # self.epsilon = max(self.epsilon, 0.)
-                self.epsilon = max(self.epsilon - 1/num_episodes, 0)
+
+                # self.epsilon = max(self.epsilon - 1/num_episodes, 0)
+
+                match self.args.env_id:
+                    case "ContextualBandit-v2":
+                        match self.args.dynamic_rate:
+                            case None:
+                                self.epsilon = 0.179 * np.exp(-0.00267 * step_id) + 0.039
+                            case 200:
+                                self.epsilon = 0.174 * np.exp(-0.00325 * step_id) + 0.051
+                            case 1000:
+                                self.epsilon = 0.177 * np.exp(-0.00292 * step_id) + 0.044
+                    case "MNISTBandit-v0":
+                        self.epsilon = 1
+                    case "NNBandit-v0":
+                        match self.args.dynamic_rate:
+                            case None:
+                                self.epsilon = 0.207 * np.exp(-0.00965 * step_id) + 0.012
+                            case 200:
+                                self.epsilon = 0.209 * np.exp(-0.01039 * step_id) + 0.014
+                            case 1000:
+                                self.epsilon = 0.207 * np.exp(-0.00965 * step_id) + 0.012
                 
         if self.args.logging:
             # wandb.run.summary["mean_regret"] = np.mean(regrets)
@@ -430,6 +463,7 @@ class DQNAgent:
         plt.xlabel('Training Step')
         plt.ylabel('Loss')
 
+        # Regret
         plt.subplot(133)
         plt.title('Regret')
         plt.plot(regrets)
@@ -440,9 +474,15 @@ class DQNAgent:
             plt.figure(figsize=(6, 6))
             plt.plot(epsilons)
 
+        # Exploration Rate
         plt.figure(figsize=(10, 5))
         plt.plot(exploration_rates, label='Exploration', alpha=0.5)
-        # plt.plot(np.arange(0, len(exploration_rates), 20), mean_exploration_rates, label='Exploration rate (mean of 20)', linewidth=2)
+        ema = pd.Series(exploration_rates).ewm(span=10, adjust=False).mean()
+        plt.plot(ema, label='EMA (span=10)', color='orange')
+        plt.xlabel('Training Step')
+        plt.ylabel('Exploration Rate')
+        plt.legend()
+        plt.title('Exploration Rate with EMA Smoothing')
         # ------------------------------------------------------
 
         if self.obs_dim == 1:
@@ -535,7 +575,7 @@ def sample_env(args, num_samples=1000):
 
 if __name__ == "__main__":
     _args = tyro.cli(Args)
-    run_name = f"{_args.exp_name}__{_args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
+    run_name = f"{_args.env_id}__{_args.seed}__{_args.dynamic_rate}"
     if _args.logging:wandb.init(
         project=_args.wandb_project_name,
         config=vars(_args),
@@ -577,7 +617,7 @@ def wandb_sweep():
         new_args = {k: v for k, v in config.items()}
         _args = Args(**new_args)
 
-        run.name = f"{_args.exp_name}__{_args.seed}__{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
+        run.name = f"{_args.env_id}__{_args.seed}__{_args.dynamic_rate}"
 
         np.random.seed(_args.seed)
         torch.manual_seed(_args.seed)

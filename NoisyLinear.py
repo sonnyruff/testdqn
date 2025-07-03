@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import math
 
@@ -91,8 +92,30 @@ class NoisyLinear(nn.Module):
         return x.sign().mul(x.abs().sqrt())
 
 
-    
+
+
+def test_scale_noise():
+    size = 10000
+
+    normal_noise = NoisyLinear.scale_noise(size, 'normal').numpy()
+    uniform_noise = NoisyLinear.scale_noise(size, 'uniform').numpy()
+
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+
+    axs[0].hist(normal_noise, bins=100, color='skyblue', edgecolor='black')
+    axs[0].set_title("scale_noise with 'normal'")
+    axs[0].set_xlabel("Value")
+    axs[0].set_ylabel("Frequency")
+
+    axs[1].hist(uniform_noise, bins=100, color='salmon', edgecolor='black')
+    axs[1].set_title("scale_noise with 'uniform'")
+    axs[1].set_xlabel("Value")
+    axs[1].set_ylabel("Frequency")
+
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == '__main__':
     noisy = NoisyLinear(2, 3)
     print(noisy(torch.rand(1, 2)))
+    test_scale_noise()
