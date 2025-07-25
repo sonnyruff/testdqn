@@ -4,6 +4,7 @@ wandb
 __pycache__
 .venv
 .venv2
+artifacts/
 
 buffalo-gym
 gym-bandit-environments
