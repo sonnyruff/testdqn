@@ -13,12 +13,7 @@ Based on:
 - OpenAI Gym (https://github.com/openai/gym) & Buffalo Gym environment (https://github.com/foreverska/buffalo-gym)
 
 e.g.
-py conbandit_combi1_0.py --no-logging --plotting
-py conbandit_combi1_0.py --no-logging --plotting --env-id MNISTBandit-v0
-py conbandit_combi1_0.py --no-logging --plotting --env-id NNBandit-v0
-py conbandit_combi1_0.py --no-logging --plotting --no-noisy-net
-py conbandit_combi1_0.py --no-logging --plotting --env-id MNISTBandit-v0 --no-noisy-net
-py conbandit_combi1_0.py --no-logging --plotting --env-id NNBandit-v0 --no-noisy-net
+py .\conbandit_combi1_0.py --no-logging --plotting --noisy-layer-distr-type normal --noisy-output-layer --seed 8249 --hidden-layer-size 40 --noisy-layer-init-std 0.5
 """
 import os
 from datetime import datetime
@@ -63,7 +58,7 @@ class Args:
     """the number of episodes to run"""
     memory_size: int = 1000
     """the replay memory buffer size"""
-    batch_size: int = 50
+    batch_size: int = 20
     """the batch size of sample from the reply memory"""
 
     noisy_layer_distr_type: str = "uniform" # or normal
@@ -196,8 +191,8 @@ class DQNAgent:
 
         match args.env_id:
             case "ContextualBandit-v2":
-                self.args.noisy_layer_init_std = 0.7
-                self.args.hidden_layer_size = 40
+                # self.args.noisy_layer_init_std = 0.7
+                # self.args.hidden_layer_size = 40
                 match args.dynamic_rate:
                     case None:
                         self.epsilon = 0.218
@@ -206,9 +201,9 @@ class DQNAgent:
                     case 1000:
                         self.epsilon = 0.218
             case "MNISTBandit-v0":
-                self.args.noisy_layer_init_std = 0.5 # DON'T FORGET TO REMOVE THIS
+                # self.args.noisy_layer_init_std = 0.5 # DON'T FORGET TO REMOVE THIS
                 self.args.hidden_layer_size = 100
-                self.epsilon = 1
+                self.epsilon = 0.07
             case "NNBandit-v0":
                 self.args.noisy_layer_init_std = 0.4
                 self.args.hidden_layer_size = 24
@@ -219,8 +214,6 @@ class DQNAgent:
                         self.epsilon = 0.219
                     case 1000:
                         self.epsilon = 0.219
-
-        print(self.args.noisy_layer_init_std)
 
         if self.args.noisy_net:
             self.dqn = NoisyNetwork(self.obs_dim,
@@ -312,7 +305,7 @@ class DQNAgent:
             regrets.append(info['total_regret'])
             rewards.append(reward)
 
-            state = next_state
+            state = next_state # line 7
 
             if self.args.logging:
                 wandb.log({"regret": info['total_regret']}, step=step_id)
@@ -322,7 +315,6 @@ class DQNAgent:
             # Scatterplot background
             if step_id % 10 == 0 and self.obs_dim == 1:
                 x = np.linspace(-3, 3, 100)
-                # put each x value forward through the network
                 q_values = self.dqn(torch.FloatTensor(x).unsqueeze(1).to(self.device)).detach().cpu().numpy()
                 best_actions = np.argmax(q_values, axis=1)
                 arm_weights.append((step_id, best_actions))
@@ -358,33 +350,6 @@ class DQNAgent:
             if self.args.noisy_net:
                 self.dqn.resample_noise() # line 13
             else:
-                # non-stationary dyn200
-                # if self.args.env_id == "ContextualBandit-v2":
-                #     self.epsilon *= 0.998
-                # elif self.args.env_id == "MNISTBandit-v0":
-                #     if step_id > 150:
-                #         self.epsilon -= .4/200
-                # elif self.args.env_id == "NNBandit-v0":
-                #     self.epsilon *= 0.996
-                # non-stationary dyn1000
-                # if self.args.env_id == "ContextualBandit-v2":
-                #     self.epsilon *= 0.9965
-                # elif self.args.env_id == "MNISTBandit-v0":
-                #     self.epsilon = max(self.epsilon - 1/num_episodes, 0)
-                # elif self.args.env_id == "NNBandit-v0":
-                #     self.epsilon *= 0.9965
-                # stationary
-                # if self.args.env_id == "ContextualBandit-v2":
-                #     if step_id >= 100:
-                #         self.epsilon *= 0.997
-                # elif self.args.env_id == "MNISTBandit-v0":
-                #     if step_id > 150:
-                #         self.epsilon -= .4/200
-                # elif self.args.env_id == "NNBandit-v0":
-                #     if step_id >= 130:
-                #         self.epsilon *= 0.995
-                # self.epsilon = max(self.epsilon, 0.)
-
                 # self.epsilon = max(self.epsilon - 1/num_episodes, 0)
 
                 match self.args.env_id:
@@ -397,7 +362,7 @@ class DQNAgent:
                             case 1000:
                                 self.epsilon = 0.177 * np.exp(-0.00292 * step_id) + 0.044
                     case "MNISTBandit-v0":
-                        self.epsilon = 1
+                        self.epsilon = 0.055 * np.exp(-0.00001 * step_id) + 0.015
                     case "NNBandit-v0":
                         match self.args.dynamic_rate:
                             case None:
@@ -408,7 +373,6 @@ class DQNAgent:
                                 self.epsilon = 0.207 * np.exp(-0.00965 * step_id) + 0.012
                 
         if self.args.logging:
-            # wandb.run.summary["mean_regret"] = np.mean(regrets)
             wandb.run.summary["regret"] = regrets[len(regrets)-1]
         
         if not self.is_sweep:
@@ -477,8 +441,8 @@ class DQNAgent:
         # Exploration Rate
         plt.figure(figsize=(10, 5))
         plt.plot(exploration_rates, label='Exploration', alpha=0.5)
-        ema = pd.Series(exploration_rates).ewm(span=10, adjust=False).mean()
-        plt.plot(ema, label='EMA (span=10)', color='orange')
+        ema = pd.Series(exploration_rates).ewm(span=100, adjust=False).mean()
+        plt.plot(ema, label='EMA (span=100)', color='orange')
         plt.xlabel('Training Step')
         plt.ylabel('Exploration Rate')
         plt.legend()
@@ -488,7 +452,7 @@ class DQNAgent:
         if self.obs_dim == 1:
             fig, ax = plt.subplots(2, 1, figsize=(15, 10))
 
-            # --- Top subplot: heatmap + scatter overlay ---
+            # Top subplot: heatmap + scatter overlay
             step_ids = [step for step, _ in arm_weights]
             x_vals = np.linspace(-3, 3, 100)
             action_matrix = np.stack([actions for _, actions in arm_weights], axis=0)
@@ -519,7 +483,7 @@ class DQNAgent:
             ax[0].grid(True)
 
 
-            # --- Bottom subplot: second scatter ---
+            # Bottom subplot: second scatter
             sample_data = sample_env(self.args)
 
             group_ids = np.unique(sample_data[:, 1])
@@ -531,8 +495,6 @@ class DQNAgent:
                 ax[1].plot(group_data[sorted_indices, 0], group_data[sorted_indices, 2], alpha=0.4, linewidth=1.5,)
 
             timesteps = data[:, 0]
-            # normalized = (timesteps - timesteps.min()) / (timesteps.max() - timesteps.min() + 1e-8)
-            # size = 80 * normalized
             size = 80 * timesteps / (timesteps.max() - timesteps.min())
 
             scatter2 = ax[1].scatter(data[:, 1], data[:, 3], c=data[:, 2], cmap="viridis", alpha=0.6, s=size)

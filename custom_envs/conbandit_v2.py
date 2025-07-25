@@ -101,8 +101,8 @@ class ConbanditEnv2(gym.Env):
             reward = self.rng.normal(reward, 0.1, 1)[0]
 
         optimal_reward_action, optimal_reward = self.optimal_reward(self.state)
-        # Calculate regret before redrawing state and arms!!
-        regret = optimal_reward - reward
+        
+        regret = optimal_reward - reward # Calculate regret before redrawing state and arms!!
         self._total_regret += regret
 
         self.__draw_state()

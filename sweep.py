@@ -110,27 +110,13 @@ mnist_extx2 = { # DON'T FORGET TO CHANGE THE INIT_STD
     }
 }
 
-mnist_ext1 = {
+mnist_ext = {
     "method": "grid",
     "metric": {"name": "regret", "goal": "minimize"},
     "parameters": {
-        "seed": {"values": [0]},
+        "seed": {"values": [1, 2]},
         "wandb_project_name": {"value": project_name},
-        "noisy_net": {"value": True},
-        "env_id": {"values": ["MNISTBandit-v0"]},
-        "num_episodes": {"value": 300000},
-        "hidden_layer_size": {"value": 100},
-        "memory_size": {"value": 50000},
-        "batch_size": {"value": 64},
-    }
-}
-mnist_ext2 = {
-    "method": "grid",
-    "metric": {"name": "regret", "goal": "minimize"},
-    "parameters": {
-        "seed": {"values": [1]},
-        "wandb_project_name": {"value": project_name},
-        "noisy_net": {"value": True},
+        "noisy_net": {"value": False},
         "env_id": {"values": ["MNISTBandit-v0"]},
         "num_episodes": {"value": 300000},
         "hidden_layer_size": {"value": 100},
@@ -149,8 +135,9 @@ if __name__ == "__main__":
         # "config_grid_nonstationary": config_grid_nonstationary,
         # "mnist_grid": mnist_grid,
         "batch": batch,
-        "mnist_ext1": mnist_ext1,
-        "mnist_ext2": mnist_ext2
+        "mnist_ext": mnist_ext,
+        "mnist_extx1": mnist_extx1,
+        "mnist_extx2": mnist_extx2
     }
 
     wandb.login()
